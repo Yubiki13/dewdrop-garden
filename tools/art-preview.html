@@ -1,0 +1,35 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Dewdrop Garden – art preview</title>
+<style>
+  body { margin: 0; background: #2a4a2a; color: #fff; font: 14px monospace; }
+  canvas { image-rendering: pixelated; display: block; }
+  p { margin: 8px 12px; opacity: .8 }
+</style></head><body>
+<p>Every sprite in the game, drawn at 3×. Edit src/art/*.js and refresh. (Serve the repo root, then open /tools/art-preview.html)</p>
+<canvas id="c"></canvas>
+<script type="module">
+import { buildArt } from '../src/art/index.js';
+import { drawSprite } from '../src/art/palette.js';
+const A = buildArt();
+const c = document.getElementById('c'); const S = 3;
+const W = 440, H = 700; c.width = W; c.height = H; c.style.width = W * S + 'px'; c.style.height = H * S + 'px';
+const ctx = c.getContext('2d'); ctx.imageSmoothingEnabled = false;
+ctx.fillStyle = '#4f9a45'; ctx.fillRect(0, 0, W, H);
+let x = 4, y = 4, rowH = 0;
+const put = (s) => { if (!s || !s.img) return; if (x + s.w > W) { x = 4; y += rowH + 4; rowH = 0; } drawSprite(ctx, s, x + s.pad, y + s.pad); x += s.w + 3; rowH = Math.max(rowH, s.h); };
+const nl = () => { x = 4; y += rowH + 8; rowH = 0; };
+for (const id in A.crops) { A.crops[id].stages.forEach(put); put(A.crops[id].icon); x += 6; }
+nl();
+for (const k in A.icons) if (!k.startsWith('crop_')) put(A.icons[k]);
+A.sprinklers.forEach(put); put(A.lamp); put(A.scarecrow);
+nl();
+const ch = A.merchant; ['down', 'up', 'right', 'left'].forEach((d) => ch[d].forEach(put)); put(A.granny.idle);
+nl();
+Object.values(A.trees).flat().forEach(put);
+nl();
+put(A.house); put(A.stall.back); put(A.stall.front); put(A.well); put(A.bin); put(A.sign); put(A.stallSign);
+nl();
+A.bushes.forEach(put); A.rocks.forEach(put); put(A.stump); A.lily.forEach(put); A.reeds.forEach(put);
+A.deco.tufts.forEach(put); A.deco.flowers.forEach(put); A.butterflies.flat().forEach(put);
+nl(); A.fences.forEach(put);
+</script></body></html>

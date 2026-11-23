@@ -13,6 +13,8 @@ import { ART } from '../art/index.js';
 import { audio } from '../core/audio.js';
 import { rand, pick } from '../core/util.js';
 import { ExpansionMethods } from './expansion.js';
+import { WildMethods } from './wild.js';
+import { hasDurability, maxDur, capacityOf, areaOf } from '../data/tools.js';
 import { AchievementTracker } from './achievements.js';
 
 export const INV_SIZE = 40;
@@ -35,6 +37,7 @@ const OBJ_NAMES = {
   scarecrow: 'Scarecrow', gnome: 'Garden Gnome', flowerpot: 'Flower Pot', beehive: 'Beehive', campfire: 'Campfire', bench: 'Garden Bench',
   birdbath: 'Birdbath', haybale: 'Hay Bale', statue: 'Owl Statue', mushroomlog: 'Mushroom Log', jackolantern: 'Jack-o\'-Lantern',
   stonelantern: 'Stone Lantern', picnic: 'Picnic Blanket', sundial: 'Sundial', goldgnome: 'Golden Gnome', fruittree: 'Fruit Tree',
+  workbench: 'Workbench', seedmaker: 'Seed Maker',
 };
 const STRUCT_INFO = {
   house: ['Cottage', 'click to sleep until morning'],
@@ -46,6 +49,8 @@ const STRUCT_INFO = {
   gate2: ['Hills gate', 'click to visit Blossom Hills'],
   wish: ['Wishing Well', 'toss 250 coins and make a wish (once a day)'],
   windmill: ['Windmill', 'click to give the sails a spin'],
+  hut: ['Forager\'s Hut', 'Fern lives here — click to trade'],
+  shrine: ['Old Shrine', 'click for a daily blessing'],
 };
 
 const GRANNY_TIPS = [
@@ -88,6 +93,7 @@ export class Game {
     if (opts.save) this.fromSave(opts.save);
     else this.newGame(opts);
     this.initExpansion(opts.save);
+    this.initWild(opts.save);
     this.ground = new GroundRenderer(this.world);
     this.ground.renderAll();
     this.tutorial = new Tutorial(this, opts.save ? opts.save.tutorial : { enabled: opts.tutorial !== false });
@@ -157,7 +163,9 @@ export class Game {
   newSlot(id, n) {
     const def = ITEMS[id];
     const s = { id, n };
-    if (def.capacity) s.water = def.capacity;
+    if (hasDurability(s)) { s.lvl = 1; s.dur = maxDur(s); }
+    const cap = capacityOf(s, ITEMS);
+    if (cap) s.water = cap;
     return s;
   }
 
@@ -252,6 +260,7 @@ export class Game {
     if (input.hit('q', '`')) this.select(HAND);
 
     this.updatePointer(dt, input, view);
+    this.updateExplore(view);
     this.updateCritters(dt, view);
     this.updateAmbientFx(dt, view);
     for (const [k, v] of this.fx.shake) { if (v - dt <= 0) this.fx.shake.delete(k); else this.fx.shake.set(k, v - dt); }
@@ -321,7 +330,7 @@ export class Game {
     const i = w.idx(tx, ty);
     const def = this.selectedDef;
     const hand = this.sel === HAND;
-    if (!this.carry) { const ex = this.describeExtra(tx, ty, i); if (ex) return ex; }
+    if (!this.carry) { const wx = this.describeWild(tx, ty, i); if (wx) return wx; const ex = this.describeExtra(tx, ty, i); if (ex) return ex; }
     if (this.isLocked(tx, ty)) return { key: 'locked', text: 'Riverside Meadow — for sale', sub: `buy it for ${fmt(MEADOW_PRICE)}c at Basil's market or the gate`, warn: true };
     if (this.carry) return { key: 'carry', text: this.carry.obj.type === 'crate' ? 'Crate' : nameOf(this.carry.obj), sub: 'let go to put it down' };
     if (w.isGranny(tx, ty)) return { key: 'granny', text: 'Granny Willow', sub: 'click to chat', target: { kind: 'granny' } };
@@ -397,6 +406,7 @@ export class Game {
     const hand = this.sel === HAND;
     this.scareButterflies(this.hover.wx, this.hover.wy);
     if (this.isLocked(tx, ty)) { (this.meadowOwned ? this.hooks.confirmHills : this.hooks.confirmMeadow)?.(); this.drag = { mode: 'none' }; return; }
+    if (this.pointerWild(tx, ty, i)) return;
     if (this.pointerExtra(tx, ty, i)) return;
 
     if (this.interact(tx, ty)) { this.drag = { mode: 'none' }; return; }
@@ -536,6 +546,7 @@ export class Game {
       }
     }
     this.objsTick(dtH);
+    this.wildTick(dtH);
   }
 
   onMorning() {
@@ -663,7 +674,7 @@ export class Game {
   }
 
   useTool(slot, tx, ty, i, cx, cy, painting) {
-    if (this.useGoldTool(slot, tx, ty, painting)) return;
+    if (this.useLeveledTool(slot, tx, ty, painting)) return;
     const w = this.world;
     const id = slot.id;
     if (id === 'hoe') {
@@ -685,7 +696,7 @@ export class Game {
       return;
     }
     if (id === 'can' || id === 'bucket') {
-      const cap = ITEMS[id].capacity;
+      const cap = capacityOf(slot, ITEMS);
       if (this.isWaterSource(tx, ty)) {
         if (slot.water >= cap && painting) return;
         slot.water = cap;
@@ -704,6 +715,7 @@ export class Game {
         }
         return;
       }
+      if (!this.wear(slot)) return;
       slot.water--;
       const tiles = id === 'bucket' ? AREA3 : [[0, 0]];
       let crops = 0;
@@ -726,6 +738,7 @@ export class Game {
       return;
     }
     if (id === 'shovel') {
+      if (!this.wear(slot)) return;
       this.cursorAnim('chop', 0.3);
       const crop = w.crops.get(i);
       if (crop) {
@@ -766,9 +779,10 @@ export class Game {
       return;
     }
     if (id === 'sickle') {
+      if (!this.wear(slot)) return;
       this.cursorAnim('swish', 0.3);
       let got = 0;
-      for (const [dx, dy] of AREA3) {
+      for (const [dx, dy] of areaOf(slot)) {
         const x = tx + dx, y = ty + dy;
         if (!w.inBounds(x, y)) continue;
         const j = w.idx(x, y);
@@ -819,7 +833,7 @@ export class Game {
     const c = w.crops.get(i);
     if (!c) return false;
     const def = CROPS[c.id];
-    const n = def.yield || 1;
+    const n = (def.yield || 1) + (quiet ? 0 : this.harvestExtras(c.id, tx * TILE + 8, ty * TILE + 6));
     if (!this.canFit(c.id, n)) { this.hint('Your bag is full! Sell something at the Shipping Bin.'); return false; }
     this.addItem(c.id, n);
     const cx = tx * TILE + 8, cy = ty * TILE + 6;
@@ -899,6 +913,8 @@ export class Game {
   }
 
   pokeObject(i, o) {
+    if (o.type === 'workbench') { this.hooks.openWorkbench?.(); return; }
+    if (o.type === 'seedmaker') { this.useSeedMaker(i, o); return; }
     if (this.pokeObjectExtra(i, o)) return;
     this.fx.shake.set(i, 0.25);
     audio.play('tok');
@@ -989,6 +1005,8 @@ export class Game {
     if (w.isGranny(tx, ty)) { this.talkToGranny(); return true; }
     const s = w.structureAt(tx, ty);
     if (!s) return false;
+    if (s.type === 'shrine') { this.useShrine(s); this.fx.shake.set('sshrine', 0.2); return true; }
+    if (s.type === 'hut') { this.talkToFern(); return true; }
     if (this.interactExtra(s, tx, ty)) { this.fx.shake.set('s' + s.type, 0.2); return true; }
     const slot = this.selected;
     switch (s.type) {
@@ -1034,8 +1052,8 @@ export class Game {
     const def = ITEMS[s.id];
     const st = w.structureAt(tx, ty);
     if (st && st.type === 'bin') {
-      if (def.kind === 'produce') this.binFx(st, this.sellSlot(slotIdx, s.n));
-      else { this.hint('Only crops can go in the Shipping Bin.'); audio.play('error'); }
+      if (def.kind === 'produce' || def.kind === 'material') this.binFx(st, this.sellSlot(slotIdx, s.n));
+      else { this.hint('Only crops and materials can go in the Shipping Bin.'); audio.play('error'); }
       return;
     }
     this.sel = slotIdx;
@@ -1080,7 +1098,7 @@ export class Game {
     const s = this.inv[i];
     if (!s) return 0;
     const def = ITEMS[s.id];
-    if (def.kind !== 'produce') return 0;
+    if (def.kind !== 'produce' && def.kind !== 'material') return 0;
     n = Math.min(n, s.n);
     const gain = def.sell * n;
     this.coins += gain;
@@ -1282,7 +1300,7 @@ export class Game {
       weather: this.weather, inv: this.inv, sel: this.sel, cam: this.view ? { x: this.view.cam.x, y: this.view.cam.y } : null,
       world: this.world.serialize(), tutorial: this.tutorial.serialize(), stats: this.stats,
       meadow: this.meadowOwned, playerId: this.playerId, hills: this.hillsOwned, mail: this.mail, mailIdx: this.mailIdx, wishDay: this.wishDay,
-      achievements: this.ach ? this.ach.serialize() : {},
+      achievements: this.ach ? this.ach.serialize() : {}, shrineDay: this.shrineDay,
     };
   }
 
@@ -1310,4 +1328,5 @@ function nameOf(o) {
   return Array.isArray(n) ? n[o.tier || 0] : n || o.type;
 }
 
-Object.assign(Game.prototype, ExpansionMethods);
+Object.defineProperties(Game.prototype, Object.getOwnPropertyDescriptors(ExpansionMethods));
+Object.defineProperties(Game.prototype, Object.getOwnPropertyDescriptors(WildMethods));

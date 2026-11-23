@@ -1,6 +1,7 @@
 // Achievements: definitions (easiest first) + a tracker that checks progress and hands out rewards.
 import { CROP_IDS } from '../data/crops.js';
 import { FISH_TYPES } from '../data/items.js';
+import { WILD_ONLY } from '../data/tools.js';
 import { audio } from '../core/audio.js';
 
 export const TIERS = [
@@ -81,13 +82,34 @@ const DEFS = [
   ['lucky', 4, 'Lucky Star', 'Get the Golden Gnome from the Wishing Well.', 1, st('luckyWish')],
   ['allcrops', 4, 'Every Seed in the Shop', `Harvest every one of the ${CROP_IDS.length} kinds of crop.`, CROP_IDS.length, kinds],
 
+  // ---- v1.3 Wildwood ----
+  ['chop1', 0, 'Timber!', 'Chop down a tree in the Wildwood.', 1, st('chopped')],
+  ['mine1', 0, 'Rock Breaker', 'Break a rock or ore vein with a Pickaxe.', 1, st('mined')],
+  ['forage1', 0, 'Forager', 'Forage something in the Wildwood.', 1, st('foraged')],
+  ['craft1', 0, 'Handy', 'Craft something at a Workbench.', 1, st('crafted')],
+  ['chest1', 1, 'Treasure Hunter', 'Open a treasure chest in the Wildwood.', 1, st('chestsOpened')],
+  ['trade1', 1, 'Fair Trade', 'Trade with Fern the Forager.', 1, st('trades')],
+  ['upgrade1', 1, 'Shiny Upgrade', 'Upgrade a tool at the Workbench.', 1, st('upgrades')],
+  ['repair1', 1, 'Good as New', 'Repair a tool.', 1, st('repairs')],
+  ['wild1', 1, 'Wild Thing', 'Harvest a crop that only grows from Wildwood seeds.', 1, (g) => [...WILD_ONLY].reduce((a, id) => a + (g.stats.harvested[id] || 0), 0)],
+  ['chop100', 2, 'Lumberjack', 'Chop down 100 trees.', 100, st('chopped')],
+  ['mine100', 2, 'Miner', 'Mine 100 rocks and ore veins.', 100, st('mined')],
+  ['forage50', 2, 'Gatherer', 'Forage 50 times.', 50, st('foraged')],
+  ['seeds10', 2, 'Seed Saver', 'Collect seeds from a Seed Maker 10 times.', 10, st('seedsMade')],
+  ['explore50', 2, 'Trailblazer', 'Explore half of the Wildwood.', (g) => Math.ceil(g.chunkTotal / 2), (g) => g.exploredCount()],
+  ['goldtool', 3, 'Golden Touch', 'Upgrade a tool all the way to Gold.', 1, st('goldTools')],
+  ['crystal10', 3, 'Crystal Collector', 'Gather 10 Crystal Shards.', 10, st('crystals')],
+  ['chests', 3, 'X Marks the Spot', 'Open every treasure chest in the Wildwood.', (g) => g.chestTotal, st('chestsOpened')],
+  ['explore', 3, 'Cartographer', 'Explore every corner of the Wildwood.', (g) => g.chunkTotal, (g) => g.exploredCount()],
+  ['smith', 4, 'Master Smith', 'Upgrade 6 tools to Gold.', 6, st('goldTools')],
+
   ['world', 5, 'The Whole World Is a Garden', 'Till every single plantable tile on the entire map. Every. Single. One.', (g) => g.tilledProgress().total, (g) => g.tilledProgress().done],
   ['earn10m', 5, 'Tycoon of the Valley', 'Earn 10,000,000 coins in total.', 10000000, st('earned')],
   ['fish250', 5, 'Legendary Angler', 'Catch 250 fish.', 250, fishTotal],
   ['all', 5, 'Completionist', 'Unlock every other achievement.', null, null],
 ];
 
-export const ACHIEVEMENTS = DEFS.map(([id, tier, name, desc, target, value]) => ({ id, tier, name, desc, target, value }));
+export const ACHIEVEMENTS = DEFS.map(([id, tier, name, desc, target, value]) => ({ id, tier, name, desc, target, value })).sort((a, b) => a.tier - b.tier);
 const ALL = ACHIEVEMENTS.find((a) => a.id === 'all');
 ALL.target = ACHIEVEMENTS.length - 1;
 
@@ -102,7 +124,7 @@ export class AchievementTracker {
     ALL.value = () => ACHIEVEMENTS.filter((a) => a.id !== 'all' && this.unlocked[a.id]).length;
   }
 
-  target(a) { return typeof a.target === 'function' ? this.cached(a, 'target', () => a.target(this.game)) : a.target; }
+  target(a) { return typeof a.target === 'function' ? (a.id === 'world' ? this.cached(a, 'target', () => a.target(this.game)) : a.target(this.game)) : a.target; }
   value(a) {
     if (a.id === 'world') return this.cached(a, 'value', () => a.value(this.game));
     return a.value(this.game);

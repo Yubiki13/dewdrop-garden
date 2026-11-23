@@ -1,5 +1,6 @@
 // Every item in the game. Icons are resolved at runtime from the art cache (see art/index.js).
 import { CROPS } from './crops.js';
+import { MATERIALS, WILD_ONLY } from './tools.js';
 
 export const ITEMS = {
   hoe:        { name: 'Hoe', kind: 'tool', icon: 'hoe', desc: 'Tills grass into soil you can plant in.' },
@@ -64,10 +65,23 @@ for (const [k, t] of Object.entries(TREES)) {
   ITEMS['fruit_' + k] = { name: t.name, kind: 'produce', icon: 'fruit_' + k, sell: t.sell, desc: `Sells for ${t.sell} coins.` };
 }
 
+// ---- v1.3 Wildwood items ----
+Object.assign(ITEMS, {
+  axe:     { name: 'Axe', kind: 'tool', icon: 'axe', price: 300, desc: 'Chops trees in the Wildwood for Wood.' },
+  pickaxe: { name: 'Pickaxe', kind: 'tool', icon: 'pickaxe', price: 400, desc: 'Breaks Wildwood rocks and ore veins.' },
+  shears:  { name: 'Shears', kind: 'tool', icon: 'shears', desc: 'Harvest flowers and herbs with these for a bonus harvest and Petals.' },
+  picker:  { name: 'Fruit Picker', kind: 'tool', icon: 'picker', desc: 'Harvest fruit with it for a bonus harvest. Also shakes extra fruit from trees.' },
+  trowel:  { name: 'Trowel', kind: 'tool', icon: 'trowel', desc: 'Harvest veggies with it for a bonus harvest and some Fiber.' },
+  wand:    { name: 'Crystal Wand', kind: 'tool', icon: 'wand', desc: 'Harvest magical crops with it for a bonus harvest and Stardust.' },
+  workbench: { name: 'Workbench', kind: 'place', icon: 'workbench', place: 'workbench', price: 800, desc: 'Craft tools and gadgets, upgrade your tools and repair them.' },
+  seedmaker: { name: 'Seed Maker', kind: 'place', icon: 'seedmaker', place: 'seedmaker', desc: 'Give it a crop and it turns it into 2 seeds after 6 hours.' },
+});
+for (const [k, m] of Object.entries(MATERIALS)) ITEMS[k] = { name: m.name, kind: 'material', icon: 'mat_' + k, sell: m.sell, desc: `${m.desc} Sells for ${m.sell}c.` };
+
 export const STACK_MAX = 99;
 
-export const SHOP_SEEDS = Object.keys(CROPS).sort((a, b) => CROPS[a].seedPrice - CROPS[b].seedPrice).map((id) => 'seed_' + id);
-export const SHOP_GOODS = ['fertilizer', 'bucket', 'sickle', 'net', 'goldcan', 'goldhoe', 'sprinkler', 'sprinkler2', 'sprinkler3', 'sprinkler4', 'beehive',
+export const SHOP_SEEDS = Object.keys(CROPS).filter((id) => !WILD_ONLY.has(id)).sort((a, b) => CROPS[a].seedPrice - CROPS[b].seedPrice).map((id) => 'seed_' + id);
+export const SHOP_GOODS = ['workbench', 'axe', 'pickaxe', 'fertilizer', 'bucket', 'sickle', 'net', 'sprinkler', 'sprinkler2', 'sprinkler3', 'sprinkler4', 'beehive',
   'sapling_apple', 'sapling_peach', 'sapling_orange', 'sapling_cherry', 'sapling_plum'];
 export const SHOP_DECOR = ['path', 'fence', 'flowerpot', 'haybale', 'picnic', 'mushroomlog', 'bench', 'jackolantern', 'birdbath', 'campfire', 'sundial',
   'lamp', 'scarecrow', 'stonelantern', 'gnome', 'statue'];

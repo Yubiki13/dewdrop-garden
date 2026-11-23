@@ -3,7 +3,7 @@
     "dewdrop": {
       "scores": {
         ".read": true,
-        ".indexOn": ["coins", "earned", "harvested"],
+        ".indexOn": ["coins", "earned", "harvested", "achievements", "days"],
         "$uid": {
           ".write": "auth != null && auth.uid === $uid",
           ".validate": "newData.hasChildren(['name', 'coins', 'earned', 'harvested', 'days', 'updated'])",
@@ -13,6 +13,8 @@
           "harvested": { ".validate": "newData.isNumber() && newData.val() >= 0" },
           "days": { ".validate": "newData.isNumber() && newData.val() >= 1" },
           "meadow": { ".validate": "newData.isBoolean()" },
+          "hills": { ".validate": "newData.isBoolean()" },
+          "achievements": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 500" },
           "updated": { ".validate": "newData.val() === now" },
           "$other": { ".validate": false }
         }

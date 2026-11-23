@@ -30,6 +30,14 @@ No goals, no timers, no pressure.
 - **Three plots of land** — the original garden, the Riverside Meadow (50,000 coins) and Blossom Hills (500,000 coins)
   with its golden koi, windmill and Wishing Well.
 - **Fishing, fruit trees, beehives, golden tools**, a daily mailbox, campfires, lanterns and Mochi the cat.
+- **The Wildwood** — a huge wild forest to explore (hidden in fog until you scroll over it): chop trees, mine
+  copper/iron/gold/crystal veins, forage, hunt for treasure chests and trade with Fern the Forager for wild seeds.
+- **Crafting & tool upgrades** — build a Workbench to craft tools and gadgets, and upgrade every tool from Basic to
+  Copper, Iron and Gold. Tools wear out, so keep them repaired. Special tools (Shears, Fruit Picker, Trowel,
+  Crystal Wand) give bonus harvests for their kind of plant.
+- **Global leaderboards** — coins, total earned, harvested, achievements and days played, shared by everyone who plays.
+- **Lots of ways to get seeds** — buy them, forage them, find them in chests, trade for them, get lucky at harvest
+  time, or turn crops into seeds with a Seed Maker.
 - **Buy in bulk** — type exactly how many seeds you want (or hit Max) in Basil's shop.
 - **Fish** swim in the pond and the meadow lake (and sometimes jump).
 - **Real watering** — crops only grow while their soil is wet. Wet soil turns dark and dries out after about a day.
@@ -106,6 +114,9 @@ src/art/crops2.js            art for the expansion crops (plant families + fruit
 src/data/crops_more.js       the 125 v1.2 crops (one row each; stats are derived from their order)
 src/game/expansion.js        v1.2 gameplay: Blossom Hills, fishing, beehives, fruit trees, mail, wishing well, Mochi
 src/game/achievements.js     achievement list + tracker
+src/game/wild.js             v1.3 gameplay: the Wildwood, tool levels + durability, crafting, Fern, Seed Maker
+src/data/tools.js            materials, tool levels, recipes, trades, wild-only crops
+src/art/wild.js              v1.3 art: new tools + metal tiers, materials, chests, ore, Fern's hut, shrine
 src/data/changelog.js        the update log shown on the title screen
 src/game/leaderboard.js      optional global leaderboard, off by default (see docs/LEADERBOARD_SETUP.md)
 src/data/items.js            every item + the shop lists

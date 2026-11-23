@@ -180,3 +180,5 @@ export function makeWindmill() {
   for (let y = 2; y < 22; y++) for (let x = 0; x < 3; x++) b.set(x, y, (y + x) % 3 === 0 ? '#c8b088' : '#f2e2bc');
   return { ...s, blade: b.finish(true, 0.5), hub: { x: 24, y: 18 } };
 }
+
+export { RAW as EXP_RAW };

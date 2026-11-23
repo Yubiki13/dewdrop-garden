@@ -1,6 +1,8 @@
-export const VERSION = '1.2.0';
+export const VERSION = '1.3.0';
 export const TILE = 16;
-export const MAP_W = 60;
+export const ORIG_W = 60; // the farm (garden, meadow, hills) is the first 60 columns
+export const MAP_W = 100; // + the Wildwood to the east (columns 60..99)
+export const WILD_X = 60;
 export const ORIG_H = 44; // rows of the original garden
 export const MEADOW_END = 70; // + the Riverside Meadow below it (rows ORIG_H..69)
 export const MAP_H = 100; // + Blossom Hills below that (rows 70..99)
@@ -29,6 +31,6 @@ export const SETTINGS_KEY = 'dewdrop-garden-settings';
 // Global leaderboard (Firebase Realtime Database). Leave empty to hide it.
 // See docs/LEADERBOARD_SETUP.md: it's free and takes about 5 minutes.
 export const LEADERBOARD = {
-  apiKey: '',
-  dbUrl: '',
+  apiKey: 'AIzaSyConaii2Yj0PB10dFMftvXdDuo8MPzS5pM',
+  dbUrl: 'https://dewdrop-garden-default-rtdb.firebaseio.com',
 };

@@ -5,7 +5,9 @@ import {
   makeLilyPad, makeReeds, makeDeco, makeButterfly, makeFence, makeCrate, makeGate,
 } from './procedural.js';
 import { CROPS } from '../data/crops.js';
-import { buildExpansionArt, buildSaplings, makeWishWell, makeWindmill, TREE_KINDS } from './expansion.js';
+import { buildExpansionArt, buildSaplings, makeWishWell, makeWindmill, TREE_KINDS, EXP_RAW } from './expansion.js';
+import { buildWildArt } from './wild.js';
+import { ICON_ROWS } from './sprites.js';
 import { sprite as spr } from './palette.js';
 import { ITEMS } from '../data/items.js';
 
@@ -87,6 +89,13 @@ export function buildArt() {
   }
   ART.goldgnome = spr(GNOME_ROWS, { overrides: { r: '#c98f22', R: '#f5d44a', p: '#fff3a0', U: '#c98f22', w: '#fff3a0' } });
   ART.icons.goldgnome = ART.goldgnome;
+  // ---- v1.3 Wildwood ----
+  const WA = (ART.wild = buildWildArt({
+    hoe: ICON_ROWS.hoe, can: ICON_ROWS.can, bucket: ICON_ROWS.bucket, bucket_full: ICON_ROWS.bucket_full,
+    shovel: ICON_ROWS.shovel, sickle: ICON_ROWS.sickle, net: EXP_RAW.net,
+  }));
+  Object.assign(ART.icons, WA.icons);
+  ART.fern = buildGranny({ S: '#4a8a4a', s: '#2f6a35', w: '#e0b27a', v: '#5a3a26', V: '#8a5a3a', l: '#c8945a', M: '#8fd65a' });
   ART.wishwell = makeWishWell();
   ART.windmill = makeWindmill();
   ART.fences = [];

@@ -1,3 +1,4 @@
+import { MAP_W } from '../config.js';
 // Granny Willow's guided introduction. Each step listens for a game event and counts progress.
 import { LAYOUT } from './world.js';
 import { audio } from '../core/audio.js';
@@ -85,9 +86,9 @@ const STEPS = [
     talk: [
       'Now we wait. Radishes are quick — about 6 hours while the soil stays wet.',
       'When a plant sparkles, it\'s ripe. Click it to pick it, or sweep across a whole row.',
-      'Feeling impatient? Click the cottage and you\'ll sleep until 6 in the morning.',
+      'After 8 in the evening you can click the cottage and sleep until morning. Until then, enjoy the day!',
     ],
-    objective: 'Harvest a ripe crop (or click the cottage to sleep)',
+    objective: 'Harvest a ripe crop',
     event: 'harvest', count: 1,
   },
   {
@@ -220,7 +221,7 @@ export class Tutorial {
     const s = this.current;
     if (!s || !this.talked || !s.objective) return null;
     if (s.pointerCrate) {
-      for (const [i, o] of this.game.world.objs) if (o.type === 'crate') return { x: (i % 60) * 16 + 8, y: Math.floor(i / 60) * 16 - 2 };
+      for (const [i, o] of this.game.world.objs) if (o.type === 'crate') return { x: (i % MAP_W) * 16 + 8, y: Math.floor(i / MAP_W) * 16 - 2 };
       return null;
     }
     if (s.pointer) return { x: s.pointer.tx * 16 + 8, y: s.pointer.ty * 16 };

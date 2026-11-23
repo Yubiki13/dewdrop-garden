@@ -1,7 +1,8 @@
 // v1.2 "Big Bloom" gameplay, mixed into Game.prototype (see the bottom of game.js):
 // Blossom Hills, golden tools, the fishing net, beehives, fruit trees, campfires, the mailbox,
 // the wishing well, the windmill, Mochi the cat, fish respawning and stat tracking for achievements.
-import { TILE, MAP_W, ORIG_H, MEADOW_END, HILLS_PRICE, G_GRASS, G_SOIL, G_WATER, F_NONE } from '../config.js';
+import { TILE, MAP_W, ORIG_H, MEADOW_END, HILLS_PRICE, G_GRASS, G_SOIL, G_WATER, F_NONE, WILD_X } from '../config.js';
+import { levelOf, BONUS_YIELD, netRadius } from '../data/tools.js';
 import { LAYOUT } from './world.js';
 import { ITEMS, TREES, FISH_TYPES } from '../data/items.js';
 import { CROPS, CROP_IDS, stageOf } from '../data/crops.js';
@@ -144,7 +145,8 @@ export const ExpansionMethods = {
     if (sel && sel.id === 'net') {
       this.cursorAnim('dip', 0.35);
       if (w.ground[i] !== G_WATER) { this.hint('Fish live in the ponds. Aim the net at one!'); this.drag = { mode: 'none' }; return true; }
-      this.catchFish(h.wx, h.wy);
+      if (!this.wear(sel)) { this.drag = { mode: 'none' }; return true; }
+      this.catchFish(h.wx, h.wy, netRadius(sel));
       this.drag = { mode: 'none' };
       return true;
     }
@@ -191,6 +193,8 @@ export const ExpansionMethods = {
     if (o.type === 'fruittree') {
       if (!o.fruit) { audio.play('rustle'); this.hint((o.age || 0) >= TREES[o.tree].days * 24 ? 'No fruit yet. Trees fruit once a day.' : 'This tree is still growing up.'); return; }
       const id = 'fruit_' + o.tree;
+      const sel = this.selected;
+      if (sel && sel.id === 'picker' && this.wear(sel)) o.fruit += BONUS_YIELD[levelOf(sel) - 1];
       if (!this.canFit(id, o.fruit)) { this.hint('Your bag is full!'); return; }
       this.addItem(id, o.fruit);
       for (let k = 0; k < o.fruit; k++) setTimeout(() => this.flyToBag(ART.icons[id], cx + rand(-10, 10), cy - 24 + rand(-6, 6)), k * 120);
@@ -252,7 +256,7 @@ export const ExpansionMethods = {
 
   tillTile(tx, ty) {
     const w = this.world;
-    if (!w.inBounds(tx, ty) || this.isLocked(tx, ty)) return false;
+    if (!w.inBounds(tx, ty) || this.isLocked(tx, ty) || tx >= WILD_X) return false;
     const i = w.idx(tx, ty);
     if (w.ground[i] !== G_GRASS || !w.isOpen(tx, ty) || w.floor[i] !== F_NONE) return false;
     w.ground[i] = G_SOIL;
@@ -437,8 +441,8 @@ export const ExpansionMethods = {
     for (const b of this.fishBodies) if (this.critters.fish.filter((f) => f.body === b).length < b.n) this.spawnFish(b);
   },
 
-  fishAt(x, y) {
-    let best = null, bd = 12;
+  fishAt(x, y, r = 12) {
+    let best = null, bd = r;
     for (const f of this.critters.fish) {
       if (f.hidden > 0) continue;
       const d = Math.hypot(f.x - x, f.y - y);
@@ -447,8 +451,8 @@ export const ExpansionMethods = {
     return best;
   },
 
-  catchFish(x, y) {
-    const f = this.fishAt(x, y);
+  catchFish(x, y, r = 12) {
+    const f = this.fishAt(x, y, r);
     this.particles.water(x, y, 8);
     if (!f) { audio.play('splash'); this.particles.text(x, y - 8, 'Missed!', '#d4efff'); this.scareFish(x, y); return; }
     const kind = FISH_KINDS[f.v];
@@ -521,7 +525,7 @@ export const ExpansionMethods = {
     for (let i = 0; i < w.ground.length; i++) {
       if (w.ground[i] === G_WATER || w.struct[i] >= 0 || w.prop[i] >= 0) continue;
       const tx = i % MAP_W, ty = (i / MAP_W) | 0;
-      if (w.isGranny(tx, ty)) continue;
+      if (w.isGranny(tx, ty) || tx >= WILD_X) continue;
       total++;
       if (w.ground[i] === G_SOIL) done++;
     }

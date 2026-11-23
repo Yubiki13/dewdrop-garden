@@ -1,6 +1,6 @@
 // Draws the world onto a low-res canvas (scaled up crisp by CSS) plus a full-res overlay for
 // text, tooltips and the pixel cursor. Also owns the free-moving camera.
-import { TILE, MAP_W, MAP_H, ORIG_H, MEADOW_END, G_SOIL, G_WATER, ZOOM_LEVELS, DEFAULT_ZOOM } from '../config.js';
+import { TILE, MAP_W, MAP_H, ORIG_H, MEADOW_END, WILD_X, G_SOIL, G_WATER, ZOOM_LEVELS, DEFAULT_ZOOM } from '../config.js';
 import { ART } from '../art/index.js';
 import { drawSprite } from '../art/palette.js';
 import { stageOf, CROPS } from '../data/crops.js';
@@ -9,6 +9,8 @@ import { LAYOUT } from './world.js';
 import { SPRINKLER_RANGE, HAND } from './game.js';
 import { TREE_KINDS } from '../art/expansion.js';
 import { TREES } from '../data/items.js';
+import { levelOf, hasDurability, durOf, maxDur, capacityOf, areaOf } from '../data/tools.js';
+import { WILD_CHUNK } from './world.js';
 import { hash2, lerp, clamp, makeCanvas, rand } from '../core/util.js';
 
 const SKY = [
@@ -45,6 +47,8 @@ function silhouette(spr, color) {
 const TOOL_CURSOR = {
   hoe: { hx: 13, hy: 3, rot: 0 }, can: { hx: 14, hy: 4, rot: 0 }, bucket: { hx: 8, hy: 12, rot: 0 },
   goldhoe: { hx: 13, hy: 3, rot: 0 }, goldcan: { hx: 14, hy: 4, rot: 0 }, net: { hx: 4, hy: 7, rot: 0 },
+  axe: { hx: 12, hy: 3, rot: 0 }, pickaxe: { hx: 3, hy: 2, rot: 0 }, shears: { hx: 11, hy: 2, rot: 0 }, picker: { hx: 12, hy: 1, rot: 0 },
+  trowel: { hx: 3, hy: 2, rot: 0 }, wand: { hx: 12, hy: 1, rot: 0 },
   shovel: { hx: 3, hy: 13, rot: 0 }, sickle: { hx: 4, hy: 4, rot: 0 },
 };
 
@@ -198,7 +202,7 @@ export class Renderer {
     if (rows !== this.rows) { this.rows = rows; this.clampCam(); this.snap(); }
     this.wind = Math.sin(t * 0.7) * 0.6 + Math.sin(t * 1.9) * 0.25 + game.weather.intensity * 0.6;
     const ht = game.hoverInfo && game.hoverInfo.target;
-    this.hl = ht ? (ht.kind === 'obj' || ht.kind === 'crop' || ht.kind === 'weed' ? 'i' + ht.i : ht.kind === 'struct' ? 's' + ht.s.type : ht.kind) : null;
+    this.hl = ht ? (ht.kind === 'obj' || ht.kind === 'crop' || ht.kind === 'weed' ? 'i' + ht.i : ht.kind === 'struct' ? 's' + ht.s.type : ht.kind === 'prop' ? 'p' + ht.pi : ht.kind) : null;
 
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
@@ -225,19 +229,25 @@ export class Renderer {
         const wd = w.weeds.get(i);
         if (wd !== undefined) list.push({ y: ty * TILE + 12, f: () => this.drawWeed(game, wd, tx, ty, i) });
       }
+    let trees = 0;
     w.props.forEach((p, pi) => {
       if (p.tx < tx0 - 2 || p.tx > tx1 + 2 || p.ty < ty0 || p.ty > ty1 + 3 || p.type === 'lily') return;
+      if (p.type === 'tree') trees++;
       list.push({ y: p.ty * TILE + (p.type === 'reeds' ? 8 : 14), f: () => this.drawProp(game, p, pi) });
     });
     for (const s of w.structures) list.push({ y: (s.ty + s.h) * TILE - 1, f: () => this.drawStructure(game, s) });
     const g = LAYOUT.granny;
     list.push({ y: g.ty * TILE + 13, f: () => this.drawGranny(game) });
     if (game.cat) list.push({ y: game.cat.y, f: () => this.drawCat(game) });
+    const fe = LAYOUT.fern;
+    if (fe.tx >= tx0 - 1 && fe.tx <= tx1 + 1 && fe.ty >= ty0 && fe.ty <= ty1) list.push({ y: fe.ty * TILE + 13, f: () => this.drawFern(game) });
+    this.lowDetail = trees > 90;
     list.sort((a, b) => a.y - b.y);
     for (const d of list) d.f();
 
     game.particles.draw(ctx, cx, cy);
     if (!game.meadowOwned || !game.hillsOwned) this.drawLockedFog(game);
+    this.drawWildFog(game);
     if (game.carry) this.drawCarried(game);
     this.drawButterflies(game);
     this.drawRain(game, dt);
@@ -372,13 +382,22 @@ export class Renderer {
   }
 
   shadow(x, y, rx, ry, a = 0.22) {
-    const ctx = this.ctx;
-    ctx.fillStyle = `rgba(16,28,24,${a})`;
-    x = Math.round(x); y = Math.round(y);
-    for (let j = -ry; j <= ry; j++) {
-      const half = Math.round(rx * Math.sqrt(1 - (j / (ry + 0.5)) ** 2));
-      ctx.fillRect(x - half, y + j, half * 2, 1);
+    // shadows are cached as tiny images: drawing hundreds of them row by row was slow
+    rx = Math.round(rx);
+    const key = rx + ',' + ry + ',' + a;
+    this.shadowCache ||= {};
+    let c = this.shadowCache[key];
+    if (!c) {
+      c = makeCanvas(rx * 2 + 2, ry * 2 + 1);
+      const x2 = c.getContext('2d');
+      x2.fillStyle = `rgba(16,28,24,${a})`;
+      for (let j = -ry; j <= ry; j++) {
+        const half = Math.round(rx * Math.sqrt(1 - (j / (ry + 0.5)) ** 2));
+        x2.fillRect(rx + 1 - half, ry + j, half * 2, 1);
+      }
+      this.shadowCache[key] = c;
     }
+    this.ctx.drawImage(c, Math.round(x) - rx - 1, Math.round(y) - ry);
   }
 
   drawShadows(game, tx0, ty0, tx1, ty1) {
@@ -388,7 +407,7 @@ export class Renderer {
       const x = p.tx * TILE + 8 + (p.ox || 0) - this.cx, y = p.ty * TILE + 14 - this.cy;
       if (p.type === 'tree') this.shadow(x + 2, y, p.kind === 'pine' ? 10 : 15, 4, 0.25);
       else if (p.type === 'bush') this.shadow(x, y, 9, 2);
-      else if (p.type === 'rock' || p.type === 'stump') this.shadow(x, y, 7, 2);
+      else if (p.type === 'rock' || p.type === 'stump' || p.type === 'ore' || p.type === 'chest') this.shadow(x, y, 7, 2);
     }
     for (const s of w.structures) this.shadow((s.tx + s.w / 2) * TILE - this.cx, (s.ty + s.h) * TILE - 2 - this.cy, s.w * 8 + 2, s.type === 'sign' ? 1 : 3, 0.2);
     const g = LAYOUT.granny;
@@ -404,7 +423,8 @@ export class Renderer {
     const def = slot && ITEMS[slot.id];
     const w = game.world;
     let area = null;
-    if (slot && ['bucket', 'sickle', 'goldhoe', 'goldcan'].includes(slot.id)) area = SPRINKLER_RANGE[1].concat([[0, 0]]);
+    if (slot && slot.id === 'bucket') area = SPRINKLER_RANGE[1].concat([[0, 0]]);
+    else if (slot && ['hoe', 'can', 'sickle', 'goldhoe', 'goldcan'].includes(slot.id) && areaOf(slot).length > 1) area = areaOf(slot);
     if (def && def.place === 'sprinkler') area = SPRINKLER_RANGE[def.tier];
     if (area) {
       ctx.fillStyle = def && def.place === 'sprinkler' ? 'rgba(120,190,255,0.22)' : 'rgba(255,255,255,0.12)';
@@ -467,6 +487,7 @@ export class Renderer {
       case 'scarecrow': return { spr: ART.scarecrow, dy: -12 };
       case 'gnome': return { spr: ART.icons.gnome, dy: 0 };
       case 'flowerpot': return { spr: ART.icons.flowerpot, dy: 0 };
+      case 'workbench': case 'seedmaker':
       case 'beehive': case 'bench': case 'birdbath': case 'haybale': case 'statue': case 'mushroomlog': case 'jackolantern':
       case 'stonelantern': case 'picnic': case 'sundial': case 'goldgnome': case 'campfire':
         return { spr: ART.icons[o.type], dy: 0 };
@@ -505,6 +526,13 @@ export class Renderer {
     else drawSprite(this.ctx, r.spr, x, y + r.dy);
     if (o.type === 'campfire' && o.lit !== false) this.drawFlames(game, x, y, tx, true);
     if (o.type === 'beehive') this.drawBees(game, x, y, tx, o);
+    if (o.type === 'seedmaker' && o.crop) {
+      const ctx = this.ctx;
+      if (o.t > 0) {
+        ctx.fillStyle = '#241826'; ctx.fillRect(x + 3, y - 2, 10, 3);
+        ctx.fillStyle = '#8fd65a'; ctx.fillRect(x + 4, y - 1, Math.round(8 * (1 - o.t / 6)), 1);
+      } else drawSprite(ctx, ART.icons['seed_' + o.crop], x, y - 14 + Math.round(Math.sin(game.t * 4)));
+    }
   }
 
   drawFruitTree(game, o, x, y, hovered) {
@@ -622,7 +650,9 @@ export class Renderer {
     const bx = p.tx * TILE - this.cx + (p.ox || 0) + sh, by = p.ty * TILE - this.cy;
     switch (p.type) {
       case 'tree': {
+        if (p.wild && game.wildState(p).regrow > 0) { drawSprite(ctx, ART.stump, bx + 1, by + 4); break; }
         const spr = ART.trees[p.kind][p.v % ART.trees[p.kind].length];
+        if (this.hl === 'p' + pi) { this.drawOutlined(spr, bx + 8 - spr.ax, by + 14 - spr.ay); break; }
         const x = bx + 8 - spr.ax, y = by + 14 - spr.ay;
         // fade the canopy when the cursor is working behind it
         const h = game.hover;
@@ -636,15 +666,79 @@ export class Renderer {
         break;
       }
       case 'bush': drawSprite(ctx, ART.bushes[p.v], bx - 3, by + 15 - 17); break;
-      case 'rock': { const s = ART.rocks[p.v]; drawSprite(ctx, s, bx + 8 - s.w / 2, by + 15 - s.h); break; }
+      case 'rock': {
+        if (p.wild && game.wildState(p).regrow > 0) { this.pebbles(bx, by); break; }
+        const s = ART.rocks[p.v];
+        if (this.hl === 'p' + pi) this.drawOutlined(s, bx + 8 - s.w / 2, by + 15 - s.h); else drawSprite(ctx, s, bx + 8 - s.w / 2, by + 15 - s.h);
+        break;
+      }
       case 'stump': drawSprite(ctx, ART.stump, bx + 1, by + 4); break;
+      case 'ore': {
+        if (game.wildState(p).regrow > 0) { this.pebbles(bx, by); break; }
+        const s = ART.wild.ore[p.kind];
+        const put = this.hl === 'p' + pi ? (a, b, c) => this.drawOutlined(a, b, c) : (a, b, c) => drawSprite(ctx, a, b, c);
+        put(s, bx + 8 - s.w / 2, by + 15 - s.h);
+        if (p.kind === 'crystal' && Math.random() < 0.02) game.particles.sparkle(p.tx * TILE + 8, p.ty * TILE + 6, 1, ['#b8f0ff', '#ffffff']);
+        break;
+      }
+      case 'forage': {
+        const ready = game.wildState(p).day !== game.day;
+        const put = this.hl === 'p' + pi ? (a, b, c) => this.drawOutlined(a, b, c) : (a, b, c) => drawSprite(ctx, a, b, c);
+        if (p.kind === 'berries') put(ready ? ART.bushes[1] : ART.bushes[0], bx - 3, by + 15 - 17);
+        else { const s = ART.wild.forage[p.kind][ready ? 0 : 1]; put(s, bx + 8 - s.w / 2, by + 15 - s.h); }
+        if (ready && Math.random() < 0.01) game.particles.sparkle(p.tx * TILE + 8, p.ty * TILE + 6, 1, ['#c8ef8a', '#ffffff']);
+        break;
+      }
+      case 'chest': {
+        const st = game.wildState(p);
+        const s = st.opened ? ART.icons.chestOpen : ART.icons.chest;
+        if (this.hl === 'p' + pi) this.drawOutlined(s, bx, by - 2); else drawSprite(ctx, s, bx, by - 2);
+        if (!st.opened && Math.random() < 0.02) game.particles.sparkle(p.tx * TILE + 8, p.ty * TILE + 2, 1);
+        break;
+      }
       case 'reeds': this.drawSway(ART.reeds[p.v], bx + 3, by - 6, Math.sin(game.t * 1.3 + p.tx) * this.wind * 1.2 + sh); break;
     }
+  }
+
+  pebbles(bx, by) {
+    const ctx = this.ctx;
+    ctx.fillStyle = '#6e6a80';
+    ctx.fillRect(bx + 4, by + 11, 2, 2); ctx.fillRect(bx + 9, by + 12, 3, 2); ctx.fillRect(bx + 7, by + 9, 2, 1);
+  }
+
+  drawWildFog(game) {
+    const x0t = Math.floor(this.cx / TILE);
+    if (x0t + Math.ceil(this.vw / TILE) < WILD_X) return;
+    const ctx = this.ctx;
+    const C = WILD_CHUNK * TILE;
+    const cols = Math.ceil((MAP_W - WILD_X) / WILD_CHUNK);
+    for (let cy = Math.floor(this.cy / C); cy <= Math.floor((this.cy + this.vh) / C); cy++)
+      for (let cx = Math.max(0, Math.floor((this.cx - WILD_X * TILE) / C)); cx < cols; cx++) {
+        const x = WILD_X * TILE + cx * C - this.cx, y = cy * C - this.cy;
+        if (x > this.vw) break;
+        if (game.world.explored[cy * cols + cx]) continue;
+        ctx.fillStyle = 'rgba(22,34,30,0.55)';
+        ctx.fillRect(x - 3, y - 3, C + 6, C + 6);
+        ctx.fillStyle = 'rgba(22,34,30,0.85)';
+        ctx.fillRect(x + 2, y + 2, C - 4, C - 4);
+      }
+  }
+
+  drawFern(game) {
+    const f = LAYOUT.fern;
+    const x = f.tx * TILE - this.cx, y = f.ty * TILE + 14 - 21 - this.cy;
+    const blink = (game.t % 3.6) < 0.15;
+    const spr = blink ? ART.fern.blink : ART.fern.idle;
+    const by = y + (Math.sin(game.t * 1.6) > 0.3 ? -1 : 0);
+    this.shadow(f.tx * TILE + 8 - this.cx, f.ty * TILE + 14 - this.cy, 5, 1, 0.28);
+    if (this.hl === 'fern') this.drawOutlined(spr, x, by); else drawSprite(this.ctx, spr, x, by);
   }
 
   drawTreeSway(spr, x, y, amt) {
     const ctx = this.ctx;
     const X = Math.round(x), Y = Math.round(y);
+    // with lots of trees on screen (zoomed out over the forest) skip the per-strip sway
+    if (this.lowDetail || Math.abs(amt) < 0.5) { ctx.drawImage(spr.img, X, Y); return; }
     const trunkFrom = spr.canopy.y + spr.canopy.h;
     for (let row = 0; row < spr.h; row += 3) {
       const k = row < trunkFrom ? 1 - row / trunkFrom : 0;
@@ -698,6 +792,15 @@ export class Renderer {
       case 'well': put(ART.well, bx - 1, by - 45); break;
       case 'gate': put(game.meadowOwned ? ART.gate.open : ART.gate.closed, bx - 1, by - 32); break;
       case 'gate2': put(game.hillsOwned ? ART.gate.open : ART.gate.closed, bx - 1, by - 32); break;
+      case 'hut': put(ART.wild.hut, bx - 1, by - 50); break;
+      case 'shrine': {
+        put(ART.wild.shrine, bx - 1, by - 42);
+        const pulse = 0.5 + 0.5 * Math.sin(game.t * 2);
+        if (Math.random() < 0.04) game.particles.sparkle(bx + this.cx + 16, by + this.cy - 38, 1, ['#b8f0ff', '#ffffff']);
+        ctx.fillStyle = `rgba(184,240,255,${0.15 + pulse * 0.2})`;
+        ctx.fillRect(bx + 12, by - 41, 9, 9);
+        break;
+      }
       case 'wish': {
         put(ART.wishwell, bx - 1, by - 45);
         if (Math.random() < 0.05) game.particles.sparkle(bx + this.cx + 16 + rand(-8, 8), by + this.cy - 16, 1, ['#f08ac0', '#8ac4f0', '#fff3a0']);
@@ -947,7 +1050,8 @@ export class Renderer {
       return;
     }
     const def = ITEMS[slot.id];
-    const iconKey = def.icon + (slot.id === 'bucket' && slot.water > 0 ? '_full' : '');
+    const lv = levelOf(slot);
+    const iconKey = def.icon + (slot.id === 'bucket' && slot.water > 0 ? '_full' : '') + (lv > 1 && hasDurability(slot) && slot.id !== 'goldhoe' && slot.id !== 'goldcan' ? '_L' + lv : '');
     const spr = ART.icons[iconKey] || ART.icons[def.icon];
     if (!spr) return;
     const hot = TOOL_CURSOR[slot.id] || { hx: 8, hy: 12, rot: 0 };
@@ -984,12 +1088,22 @@ export class Renderer {
       o.fillStyle = '#fff3d8';
       o.fillText(String(slot.n), mx + 7 * S, my + 3 * S);
     }
-    if (def.capacity) {
-      const f = Math.max(0, slot.water / def.capacity);
+    const cap = capacityOf(slot, ITEMS);
+    let barY = my + 6 * S;
+    if (cap) {
+      const f = Math.max(0, slot.water / cap);
       o.fillStyle = '#241826';
-      o.fillRect(mx - 6 * S, my + 6 * S, 12 * S, 2 * S);
+      o.fillRect(mx - 6 * S, barY, 12 * S, 2 * S);
       o.fillStyle = '#6ab4f0';
-      o.fillRect(mx - 6 * S, my + 6 * S, Math.round(12 * S * f), 2 * S);
+      o.fillRect(mx - 6 * S, barY, Math.round(12 * S * f), 2 * S);
+      barY += 2 * S;
+    }
+    if (hasDurability(slot) && !game.sandbox) {
+      const f = Math.max(0, durOf(slot) / maxDur(slot));
+      o.fillStyle = '#241826';
+      o.fillRect(mx - 6 * S, barY, 12 * S, S);
+      o.fillStyle = f > 0.5 ? '#6ad05a' : f > 0.2 ? '#f5c030' : '#e04a4a';
+      o.fillRect(mx - 6 * S, barY, Math.round(12 * S * f), S);
     }
   }
 }

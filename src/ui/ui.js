@@ -3,6 +3,7 @@ import { ART, iconURL } from '../art/index.js';
 import { sprite, drawSprite } from '../art/palette.js';
 import { ITEMS, SHOP_SEEDS, SHOP_GOODS, SHOP_DECOR, isStackable, STACK_MAX } from '../data/items.js';
 import { ACHIEVEMENTS, TIERS } from '../game/achievements.js';
+import { levelOf, hasDurability, durOf, maxDur, capacityOf, toolName, LEVEL_NAMES, UPGRADE_COST, repairCost, RECIPES, TRADES } from '../data/tools.js';
 import { HILLS_PRICE } from '../config.js';
 import { CHANGELOG } from '../data/changelog.js';
 import { CROPS } from '../data/crops.js';
@@ -19,6 +20,20 @@ const h = (html) => {
   return t.content.firstElementChild;
 };
 const fmt = (n) => Math.floor(n).toLocaleString('en-US');
+const spriteURLOf = (spr) => spr._url || (spr._url = spr.img.toDataURL());
+function upgradeBlurb(id, lvl) {
+  const L = lvl - 1;
+  switch (id) {
+    case 'hoe': return ['', 'tills a plus shape', 'tills a 3×3 patch', 'tills a huge 5×5 patch'][L];
+    case 'can': return ['', `holds 60, waters a plus shape`, 'holds 120, waters 3×3', 'holds 250, waters 3×3'][L];
+    case 'bucket': return ['', 'holds 8 splashes', 'holds 12 splashes', 'holds 20 splashes'][L];
+    case 'sickle': return ['', 'more durable', 'harvests a 5×5 area', 'harvests 5×5, very durable'][L];
+    case 'net': return ['', 'wider net', 'even wider net', 'catches anything nearby'][L];
+    case 'axe': case 'pickaxe': return ['', 'hits twice as hard', 'hits three times as hard', 'one-hit wonders'][L];
+    case 'shears': case 'picker': case 'trowel': case 'wand': return ['', 'more durable', '+2 bonus harvest', '+3 bonus harvest'][L];
+    default: return 'more durable';
+  }
+}
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 const WEATHER_ICONS = {
@@ -164,6 +179,8 @@ export class UI {
       confirmSleep: () => this.confirmSleep(),
       confirmMeadow: () => this.confirmMeadow(),
       confirmHills: () => this.confirmHills(),
+      openWorkbench: () => this.openWorkbench(),
+      openTrades: () => this.openTrades(),
       achievement: (a, reward) => this.achievementToast(a, reward),
       newDay: () => this.onNewDay(),
       isVisible: (i) => this.app.renderer.isVisibleTile(i),
@@ -214,7 +231,10 @@ export class UI {
   slotIcon(s) {
     if (!s) return '';
     const def = ITEMS[s.id];
-    const variant = s.id === 'bucket' && s.water > 0 ? 'full' : null;
+    const lv = levelOf(s);
+    const lvTag = lv > 1 && hasDurability(s) && s.id !== 'goldhoe' && s.id !== 'goldcan' ? 'L' + lv : null;
+    const full = s.id === 'bucket' && s.water > 0;
+    const variant = full && lvTag ? 'full_' + lvTag : full ? 'full' : lvTag;
     const spr = ART.icons[def.icon];
     const w = spr ? spr.w : 16;
     return `<img class="icon" src="${iconURL(s.id, variant)}" style="width:calc(var(--p)*${w})">`;
@@ -223,9 +243,14 @@ export class UI {
   slotInner(s, idx, showKey) {
     let html = this.slotIcon(s);
     if (s && isStackable(s.id) && s.n > 1) html += `<span class="n">${s.n}</span>`;
-    if (s && ITEMS[s.id].capacity) {
-      const f = Math.max(0, s.water / ITEMS[s.id].capacity);
+    const cap = s ? capacityOf(s, ITEMS) : 0;
+    if (cap) {
+      const f = Math.max(0, s.water / cap);
       html += `<span class="meter"><i style="width:${f * 100}%"></i></span>`;
+    }
+    if (s && hasDurability(s) && !this.game?.sandbox) {
+      const f = Math.max(0, durOf(s) / maxDur(s));
+      html += `<span class="dura ${f <= 0 ? 'broken' : ''}"><i style="width:${f * 100}%;background:${f > 0.5 ? '#6ad05a' : f > 0.2 ? '#f5c030' : '#e04a4a'}"></i></span>`;
     }
     if (showKey) html += `<span class="key">${(idx + 1) % 10}</span>`;
     return html;
@@ -306,10 +331,11 @@ export class UI {
     }
     const s = this.game.inv[i];
     if (!s) { el.style.opacity = 0; return; }
-    const def = ITEMS[s.id];
     let extra = '';
-    if (def.capacity) extra = ` · ${s.water}/${def.capacity}`;
-    el.textContent = def.name + extra;
+    const cap = capacityOf(s, ITEMS);
+    if (cap) extra += ` · ${s.water}/${cap}`;
+    if (hasDurability(s) && !this.game.sandbox) extra += durOf(s) <= 0 ? ' · BROKEN' : ` · ${durOf(s)}/${maxDur(s)} uses`;
+    el.textContent = toolName(s, ITEMS) + extra;
     el.style.opacity = 1;
     this.nameTimer = 1.8;
   }
@@ -496,9 +522,11 @@ export class UI {
     if (!s) { box.innerHTML = '<span style="color:var(--ink-soft)">Empty slot.</span>'; return; }
     const def = ITEMS[s.id];
     let extra = '';
-    if (def.capacity) extra = ` · ${s.water}/${def.capacity} water`;
-    if (def.kind === 'produce') extra = ` · sells for ${def.sell}c each`;
-    box.innerHTML = `<b>${esc(def.name)}</b><span style="color:var(--ink-soft)">${extra}</span><div class="d">${esc(def.desc)}</div>`;
+    const cap = capacityOf(s, ITEMS);
+    if (cap) extra += ` · ${s.water}/${cap} water`;
+    if (hasDurability(s) && !this.game.sandbox) extra += durOf(s) <= 0 ? ' · broken! repair it at a Workbench' : ` · durability ${durOf(s)}/${maxDur(s)}`;
+    if (def.kind === 'produce' || def.kind === 'material') extra = ` · sells for ${def.sell}c each`;
+    box.innerHTML = `<b>${esc(toolName(s, ITEMS))}</b><span style="color:var(--ink-soft)">${extra}</span><div class="d">${esc(def.desc)}</div>`;
   }
 
   clickSlot(i, shift) {
@@ -854,7 +882,7 @@ export class UI {
 
   openLeaderboard(back) {
     const tabs = Object.entries(STATS).map(([k, v]) => `<button class="btn small" data-stat="${k}" style="height:calc(var(--p)*14)">${v.label}</button>`).join('');
-    const el = h(`<div class="modal panel" style="width:calc(var(--p)*200)">
+    const el = h(`<div class="modal panel" style="width:min(calc(var(--p)*250), 95vw)">
       <button class="btn close">✕</button>
       <h2><img class="icon" src="${this.trophyURL}" style="width:calc(var(--p)*16)"> Leaderboard</h2>
       <div class="tabs">${tabs}</div>
@@ -903,8 +931,8 @@ export class UI {
         if (!rows.length) { list.innerHTML = '<div class="lbmsg">Nobody here yet. Be the first!</div>'; return; }
         list.innerHTML = rows.map((r, i) => `<div class="lbrow paper ${r.id === leaderboard.uid ? 'me' : ''}">
             <span class="rank r${i + 1}">${i + 1}</span>
-            <span class="who">${esc(r.name || 'Gardener')}${r.meadow ? ' <span class="tag">meadow</span>' : ''}</span>
-            <span class="val num">${stat === 'harvested' ? '' : `<img class="icon" src="${this.coinURL}" style="width:calc(var(--p)*10)">`}${fmt(r[stat] || 0)}</span>
+            <span class="who">${esc(r.name || 'Gardener')}${r.hills ? ' <span class="tag">hills</span>' : r.meadow ? ' <span class="tag">meadow</span>' : ''}</span>
+            <span class="val num">${stat === 'coins' || stat === 'earned' ? `<img class="icon" src="${this.coinURL}" style="width:calc(var(--p)*10)">` : stat === 'achievements' ? `<img class="icon" src="${ART.x.medals[2].img.toDataURL()}" style="width:calc(var(--p)*8)">` : ''}${fmt(r[stat] || 0)}</span>
           </div>`).join('');
         const mine = $('.mine', me);
         if (mine && g) {
@@ -923,9 +951,121 @@ export class UI {
 
   confirmSleep() {
     const g = this.game;
-    const hr = g.hour;
-    const early = hr >= 6 && hr < 18;
-    this.confirm('Go to bed?', early ? 'It\'s still daytime, but a nap never hurt anyone. You\'ll wake up at 6:00 am tomorrow.' : 'Snuggle in and sleep until 6:00 am. Your crops keep growing while you rest.', 'Sleep', () => this.doSleep(), 'Not yet');
+    if (!g.canSleep()) {
+      this.dialog('Cottage', ['You\'re not sleepy yet! Bedtime is after 8:00 pm.', 'Plenty of daylight left. Maybe go explore the Wildwood?'], null);
+      return;
+    }
+    this.confirm('Go to bed?', 'Snuggle in and sleep until 6:00 am. Your crops keep growing while you rest.', 'Sleep', () => this.doSleep(), 'Not yet');
+  }
+
+  /* ---------------------------- workbench ---------------------------- */
+
+  matChips(mats) {
+    const g = this.game;
+    return Object.entries(mats).map(([k, n]) => {
+      const have = k === 'coins' ? (g.sandbox ? Infinity : g.coins) : g.count(k);
+      const ok = have >= n;
+      const icon = k === 'coins' ? this.coinURL : iconURL(k);
+      return `<span class="chipmat ${ok ? '' : 'short'}"><img class="icon" src="${icon}" style="width:calc(var(--p)*9)"><span class="num">${fmt(n)}</span></span>`;
+    }).join('');
+  }
+
+  openWorkbench(tab = this.wbTab || 'craft') {
+    const tabs = [['craft', 'Craft'], ['upgrade', 'Upgrade'], ['repair', 'Repair']];
+    const el = h(`<div class="modal panel">
+      <button class="btn close">✕</button>
+      <h2><img class="icon" src="${iconURL('workbench')}" style="width:calc(var(--p)*14)"> Workbench <span class="sub"></span></h2>
+      <div class="tabs">${tabs.map(([k, n]) => `<button class="btn small ${tab === k ? 'on' : ''}" data-tab="${k}" style="height:calc(var(--p)*14)">${n}</button>`).join('')}</div>
+      <div class="scroll" style="max-height:60vh"><div class="shoplist"></div></div>
+      <div class="hint">Materials come from the Wildwood: chop trees, mine rocks, forage, and open treasure chests.</div>
+    </div>`);
+    this.openModal('workbench', el);
+    this.wbTab = tab;
+    el.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => {
+      this.wbTab = b.dataset.tab;
+      el.querySelectorAll('[data-tab]').forEach((x) => x.classList.toggle('on', x === b));
+      audio.play('ui');
+      this.renderWorkbench();
+    }));
+    this.renderWorkbench();
+  }
+
+  renderWorkbench() {
+    const g = this.game;
+    const list = $('#modal-root .shoplist');
+    if (!list) return;
+    $('#modal-root h2 .sub').innerHTML = this.coinsHTML(g.sandbox ? '∞' : g.coins, 12);
+    list.innerHTML = '';
+    const row = (iconHtml, name, desc, cost, btn, onClick, disabled) => {
+      const r = h(`<div class="shoprow paper ${disabled ? 'cant' : ''}">
+        <div class="iconbox slot">${iconHtml}</div>
+        <div class="info"><div class="nm">${esc(name)}</div><div class="ds">${esc(desc)}</div><div class="mats">${cost}</div></div>
+        <div class="buybox"><button class="btn small buy">${btn}</button></div>
+      </div>`);
+      const b = $('.buy', r);
+      if (disabled) b.disabled = true;
+      b.addEventListener('click', () => { onClick(); this.renderWorkbench(); this.renderHotbar(); this.renderClock(true); });
+      list.appendChild(r);
+    };
+    if (this.wbTab === 'craft') {
+      for (const rc of RECIPES) {
+        const def = ITEMS[rc.id];
+        row(this.slotIcon({ id: rc.id }), (rc.n ? rc.n + '× ' : '') + def.name, def.desc, this.matChips(rc.mats), 'Craft', () => g.craft(rc), !g.has(rc.mats));
+      }
+      return;
+    }
+    const tools = g.inv.map((sl, i) => [sl, i]).filter(([sl]) => sl && hasDurability(sl));
+    if (!tools.length) { list.appendChild(h('<div class="lbmsg">You don\'t have any tools with you.</div>')); return; }
+    if (this.wbTab === 'upgrade') {
+      for (const [sl] of tools) {
+        const l = levelOf(sl);
+        const maxed = l >= 4 || sl.id === 'goldhoe' || sl.id === 'goldcan';
+        const cost = maxed ? null : UPGRADE_COST[l + 1];
+        const next = maxed ? '' : `${LEVEL_NAMES[l]}: ${upgradeBlurb(sl.id, l + 1)}`;
+        row(this.slotIcon(sl), toolName(sl, ITEMS), maxed ? 'Fully upgraded!' : `Next: ${next}`, cost ? this.matChips(cost) : '', maxed ? 'Max' : 'Upgrade', () => g.upgradeTool(sl), maxed || !g.has(cost));
+      }
+      return;
+    }
+    // repair
+    const worn = tools.filter(([sl]) => durOf(sl) < maxDur(sl));
+    if (!worn.length) { list.appendChild(h('<div class="lbmsg">All your tools are in perfect shape.</div>')); return; }
+    for (const [sl] of worn) {
+      const cost = repairCost(sl);
+      row(this.slotIcon(sl), toolName(sl, ITEMS), `Durability ${durOf(sl)} / ${maxDur(sl)}${durOf(sl) <= 0 ? ' — broken!' : ''}`, this.matChips(cost), 'Repair', () => g.repairTool(sl), !g.has(cost));
+    }
+  }
+
+  /* ---------------------------- Fern's trades ---------------------------- */
+
+  openTrades() {
+    const el = h(`<div class="modal panel">
+      <button class="btn close">✕</button>
+      <h2><img class="icon" src="${spriteURLOf(ART.fern.idle)}" style="width:calc(var(--p)*14)"> Fern's Trades</h2>
+      <div class="hint" style="margin:0 0 calc(var(--p)*3)">"Bring me what you gather out here, and I'll share my wild seeds. These won't grow anywhere else!"</div>
+      <div class="scroll" style="max-height:60vh"><div class="shoplist"></div></div>
+    </div>`);
+    this.openModal('trades', el);
+    this.renderTrades();
+  }
+
+  renderTrades() {
+    const g = this.game;
+    const list = $('#modal-root .shoplist');
+    if (!list) return;
+    list.innerHTML = '';
+    for (const t of TRADES) {
+      const [id, n] = t.get;
+      const ok = g.has(t.give);
+      const r = h(`<div class="shoprow paper ${ok ? '' : 'cant'}">
+        <div class="iconbox slot">${this.slotIcon({ id })}</div>
+        <div class="info"><div class="nm">${n}× ${esc(ITEMS[id].name)}${CROPS[ITEMS[id].crop]?.wild ? ' <span class="tag new">wild</span>' : ''}</div><div class="mats">${this.matChips(t.give)}</div></div>
+        <div class="buybox"><button class="btn small buy">Trade</button></div>
+      </div>`);
+      const b = $('.buy', r);
+      if (!ok) b.disabled = true;
+      b.addEventListener('click', () => { g.trade(t); this.renderTrades(); this.renderHotbar(); });
+      list.appendChild(r);
+    }
   }
 
   doSleep() {
@@ -1046,6 +1186,9 @@ export class UI {
         damp (dark). Watered soil dries out after about a day.<br><br>
         <b>Water:</b> the Watering Can soaks one tile, the Bucket soaks 3×3. Refill both at the pond or the well.
         Sprinklers water their area every morning at 6:00, and rain waters everything.<br><br>
+        <b>The Wildwood:</b> scroll east past Basil's stall. Chop trees (Axe), mine rocks (Pickaxe), forage, find treasure
+        chests and trade with Fern for wild seeds. Build a <b>Workbench</b> to craft things and to upgrade and repair your
+        tools. Tools wear out as you use them!<br><br>
         <b>Extras:</b> catch fish with the Fishing Net, collect honey from beehives, pick fruit from your trees,
         check the mailbox by the cottage every morning, make a wish at the Wishing Well in Blossom Hills, and pet Mochi.
         Open <b>Achievements</b> (top left) to see everything there is to do.<br><br>

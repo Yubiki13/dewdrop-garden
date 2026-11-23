@@ -148,9 +148,9 @@ const GRANNY = [
   '...vvvvvvvvvv...',
   '.....bb..bb.....',
 ];
-export function buildGranny() {
+export function buildGranny(overrides = null) {
   const blink = GRANNY.map((r, i) => (i === 8 ? '...SdfdffdfdS...' : r));
-  return { idle: sprite(GRANNY, { outlineStrength: 0.7 }), blink: sprite(blink, { outlineStrength: 0.7 }) };
+  return { idle: sprite(GRANNY, { outlineStrength: 0.7, overrides }), blink: sprite(blink, { outlineStrength: 0.7, overrides }) };
 }
 
 /* ------------------------------------------------------------------ */
@@ -624,3 +624,5 @@ export function buildFish() {
     sprite(FISH, { overrides: { A: '#ffd030', X: '#ffffff' }, outlineStrength: 0.5 }), // golden koi
   ];
 }
+
+export { ICONS as ICON_ROWS };

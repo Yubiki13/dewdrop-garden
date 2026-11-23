@@ -307,3 +307,14 @@ li.fix::before { content: '✓'; color: #4a72c0; }
 .seedbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--p); margin-bottom: var(--p); }
 .seedbar .search { flex: 1; min-width: calc(var(--p) * 60); font-family: inherit; font-size: calc(var(--p) * 7); color: var(--ink); background: #fff8e8; border: var(--p) solid #8a6a44; padding: 0 calc(var(--p) * 2); height: calc(var(--p) * 13); outline: none; }
 .seedbar .chip { height: calc(var(--p) * 12); font-size: calc(var(--p) * 5.8); }
+
+/* durability + crafting */
+.slotbox .dura { position: absolute; left: calc(var(--p) * 1); right: calc(var(--p) * 1); top: calc(var(--p) * 0.5); height: var(--p); background: #3b2416; }
+.slotbox .dura > i { display: block; height: 100%; }
+.slotbox:has(.dura.broken) img { filter: grayscale(1) brightness(0.8); }
+.shoprow .mats { display: flex; flex-wrap: wrap; gap: calc(var(--p) * 2); margin-top: var(--p); }
+.chipmat { display: inline-flex; align-items: center; gap: calc(var(--p) * 0.5); font-size: calc(var(--p) * 6); font-weight: 600; color: #3d7a2a; }
+.chipmat.short { color: #b04040; }
+
+.tabs .btn { white-space: nowrap; }
+.tabs { flex-wrap: wrap; }

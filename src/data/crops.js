@@ -1,4 +1,5 @@
 import { MORE_CROPS, REGROW } from './crops_more.js';
+import { WILD_ONLY } from './tools.js';
 
 const BLURB = {
   herb: 'A fragrant herb. Keeps regrowing.', bulb: 'A plump bulb hiding under the soil.', leafy: 'Fresh, leafy greens.',
@@ -84,6 +85,7 @@ MORE_CROPS.forEach(([id, name, cat, fam, A, a, L], r) => {
   }
   if (cat === 'magic') def.glow = hexRgb(L === '#ffffff' ? A : L);
   def.desc = BLURB[fam] || 'A lovely new crop.';
+  if (WILD_ONLY.has(id)) { def.wild = true; def.desc += ' Only found in the Wildwood.'; }
   if (id === 'celestiallotus') def.desc = 'A flower from the stars themselves. The best seed in the whole game.';
   CROPS[id] = def;
 });

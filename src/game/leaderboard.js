@@ -7,7 +7,9 @@ const AUTH_KEY = 'dewdrop-garden-lb-auth';
 export const STATS = {
   coins: { label: 'Coins', short: 'Coins' },
   earned: { label: 'Total earned', short: 'Earned' },
-  harvested: { label: 'Crops harvested', short: 'Harvested' },
+  harvested: { label: 'Harvested', short: 'Harvested' },
+  achievements: { label: 'Achievements', short: 'Achievements' },
+  days: { label: 'Days played', short: 'Days' },
 };
 
 class Leaderboard {
@@ -65,6 +67,8 @@ class Leaderboard {
       harvested,
       days: game.day,
       meadow: !!game.meadowOwned,
+      hills: !!game.hillsOwned,
+      achievements: game.ach ? game.ach.count : 0,
     };
   }
 

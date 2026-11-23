@@ -2,6 +2,30 @@
 // To add an update: put a new entry at the top and bump VERSION in src/config.js to match.
 export const CHANGELOG = [
   {
+    version: '1.3',
+    title: 'The Wildwood Update',
+    added: [
+      'The Wildwood: a huge wild forest east of your farm to explore. It\'s hidden in fog until you scroll over it, and more opens up as you buy land',
+      'Materials: wood, stone, fiber, copper, iron, gold ore, crystal shards, petals and stardust',
+      'Chop trees with an Axe and break rocks and ore veins with a Pickaxe. They grow back after a few days',
+      'Forage wild herbs, mushrooms and berry bushes every day, and hunt for 9 hidden treasure chests',
+      'Fern the Forager lives in the woods and trades wild seeds for your materials',
+      '12 wild crops that can\'t be bought: find their seeds by foraging, in chests, or from Fern',
+      'New ways to get seeds: harvests sometimes drop a seed, and the craftable Seed Maker turns crops into seeds',
+      'The Workbench: craft tools, sprinklers, decor and more out of materials',
+      'Tool upgrades: Basic, Copper, Iron and Gold. Upgraded hoes and cans work on bigger areas and cans hold more water',
+      'New harvesting tools: Shears (flowers & herbs), Fruit Picker, Trowel (veggies) and Crystal Wand (magical crops) give bonus harvests',
+      'An old shrine in the woods gives a blessing once a day',
+      '19 new achievements',
+      'Global leaderboards! See who has the most coins, has earned the most, harvested the most, unlocked the most achievements and played the longest',
+    ],
+    fixed: [
+      'Sleeping is only possible at night now (8 pm to 5 am). No more skipping whole days!',
+      'Tools now have durability. They wear down as you use them and break when they run out, so repair them at a Workbench',
+      'Golden Hoe and Golden Can are no longer sold (Gold tool upgrades replace them). If you already own them, they still work',
+    ],
+  },
+  {
     version: '1.2',
     title: 'The Big Bloom Update',
     added: [

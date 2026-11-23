@@ -21,7 +21,7 @@ export const ITEMS = {
 
 for (const [id, c] of Object.entries(CROPS)) {
   ITEMS['seed_' + id] = {
-    name: c.name + ' Seeds', kind: 'seed', crop: id, icon: 'seed_' + id, price: c.seedPrice,
+    name: c.seedName || c.name + ' Seeds', kind: 'seed', crop: id, icon: 'seed_' + id, price: c.seedPrice,
     desc: `${c.desc} Ripens after ${c.hours}h of wet soil.${c.regrow ? ` Regrows every ${c.regrow}h.` : ''}`,
   };
   ITEMS[id] = { name: c.name, kind: 'produce', icon: 'crop_' + id, sell: c.sell, desc: `Sells for ${c.sell} coins.` };
@@ -29,7 +29,7 @@ for (const [id, c] of Object.entries(CROPS)) {
 
 export const STACK_MAX = 99;
 
-export const SHOP_SEEDS = Object.keys(CROPS).map((id) => 'seed_' + id);
+export const SHOP_SEEDS = Object.keys(CROPS).sort((a, b) => CROPS[a].seedPrice - CROPS[b].seedPrice).map((id) => 'seed_' + id);
 export const SHOP_GOODS = ['fertilizer', 'bucket', 'sickle', 'sprinkler', 'sprinkler2', 'sprinkler3', 'path', 'fence', 'flowerpot', 'lamp', 'scarecrow', 'gnome'];
 
 export function isStackable(id) {

@@ -1,7 +1,7 @@
 // Core game state + rules. Everything is done with the cursor: there is no player character.
 // Rendering and DOM UI live elsewhere and talk to this through `hooks`.
 import {
-  TILE, MAP_W, MAP_H, HOUR_SECONDS, WET_HOURS, G_GRASS, G_SOIL, G_WATER, F_NONE, F_PATH, VERSION, PAN_SPEED,
+  TILE, MAP_W, MAP_H, ORIG_H, HOUR_SECONDS, WET_HOURS, G_GRASS, G_SOIL, G_WATER, F_NONE, F_PATH, VERSION, PAN_SPEED, MEADOW_PRICE,
 } from '../config.js';
 import { World, LAYOUT } from './world.js';
 import { GroundRenderer } from './ground.js';
@@ -14,6 +14,8 @@ import { audio } from '../core/audio.js';
 import { rand, pick } from '../core/util.js';
 
 export const INV_SIZE = 30;
+export { MEADOW_PRICE };
+const fmt = (n) => Math.floor(n).toLocaleString('en-US');
 export const HAND = -1;
 
 export const SPRINKLER_RANGE = [
@@ -35,6 +37,7 @@ const STRUCT_INFO = {
   stall: ['Basil\'s Market', 'click to shop'],
   well: ['Well', 'click with a can or bucket to refill'],
   sign: ['Garden sign', 'click to read'],
+  gate: ['Meadow gate', 'click to visit the Riverside Meadow'],
 };
 
 const GRANNY_TIPS = [
@@ -63,7 +66,7 @@ export class Game {
     this.hooks = {};
     this.listeners = {};
     this.particles = new Particles();
-    this.critters = { butterflies: [], fireflies: [] };
+    this.critters = { butterflies: [], fireflies: [], fish: [] };
     this.fx = { sprinklers: [], shake: new Map(), drop: new Map(), cursor: null };
     this.t = 0;
     this.drag = null;
@@ -79,6 +82,7 @@ export class Game {
     this.ground = new GroundRenderer(this.world);
     this.ground.renderAll();
     this.tutorial = new Tutorial(this, opts.save ? opts.save.tutorial : { enabled: opts.tutorial !== false });
+    this.initFish();
   }
 
   newGame({ name = 'Gardener', mode = 'cozy', seed = (Math.random() * 1e9) | 0, tutorial = true }) {
@@ -90,6 +94,8 @@ export class Game {
     this.weather = { rain: false, intensity: 0, tomorrow: false };
     this.inv = new Array(INV_SIZE).fill(null);
     this.sel = HAND;
+    this.meadowOwned = false;
+    this.playerId = null;
     const items = STARTER.map((x) => [...x]);
     if (!tutorial) items.push(['bucket', 1], ['sprinkler', 1]);
     if (mode === 'sandbox') for (const [id, n] of SANDBOX_EXTRA) { const e = items.find((x) => x[0] === id); if (e) e[1] = Math.max(e[1], n); else items.push([id, n]); }
@@ -99,6 +105,33 @@ export class Game {
   }
 
   get sandbox() { return this.mode === 'sandbox'; }
+  isLocked(tx, ty) { return !this.meadowOwned && ty >= ORIG_H; }
+
+  /* ---------------------------- the Riverside Meadow ---------------------------- */
+
+  buyMeadow() {
+    if (this.meadowOwned) return false;
+    if (!this.sandbox && this.coins < MEADOW_PRICE) { this.toast('Not enough coins yet — keep growing!'); audio.play('error'); return false; }
+    if (!this.sandbox) this.coins -= MEADOW_PRICE;
+    this.meadowOwned = true;
+    audio.play('quest');
+    audio.play('crate');
+    const g = LAYOUT.gate;
+    this.fx.shake.set('sgate', 0.5);
+    this.particles.sparkle((g.tx + 1) * TILE, g.ty * TILE, 20);
+    this.particles.burst((g.tx + 1) * TILE, (g.ty + 1) * TILE, 14, { color: ['#d8a868', '#b07a4a', '#8fd65a', '#f08ac0'], speed: 50, vz: 60, g: 200, life: 0.9 });
+    this.toast('The Riverside Meadow is yours! The gate is open.');
+    this.hooks.coinsChanged?.();
+    this.emit('meadow');
+    setTimeout(() => this.visitMeadow(), 700);
+    return true;
+  }
+
+  visitMeadow() {
+    if (!this.view) return;
+    const v = LAYOUT.meadowView;
+    this.view.flyTo(v.tx * TILE + 8, v.ty * TILE + 8);
+  }
   get day() { return Math.floor(this.time / 1440) + 1; }
   get minuteOfDay() { return this.time % 1440; }
   get hour() { return (this.time % 1440) / 60; }
@@ -239,7 +272,7 @@ export class Game {
       view.panWorld(dx * sp, dy * sp);
       this.notePan(Math.hypot(view.cam.x - bx, view.cam.y - by));
     }
-    if (input.wheel) { view.zoomBy(input.wheel, input.wheelX, input.wheelY); this.emit('zoom'); }
+    if (input.wheel) { view.zoomBy(-input.wheel, input.wheelX, input.wheelY); this.emit('zoom'); } // scroll down = zoom out
     if (input.hit('=', '+')) view.zoomBy(-1, innerWidth / 2, innerHeight / 2);
     if (input.hit('-', '_')) view.zoomBy(1, innerWidth / 2, innerHeight / 2);
     const pd = input.pinchDelta;
@@ -277,13 +310,15 @@ export class Game {
     const i = w.idx(tx, ty);
     const def = this.selectedDef;
     const hand = this.sel === HAND;
+    if (this.isLocked(tx, ty)) return { key: 'locked', text: 'Riverside Meadow — for sale', sub: `buy it for ${fmt(MEADOW_PRICE)}c at Basil's market or the gate`, warn: true };
     if (this.carry) return { key: 'carry', text: this.carry.obj.type === 'crate' ? 'Crate' : nameOf(this.carry.obj), sub: 'let go to put it down' };
     if (w.isGranny(tx, ty)) return { key: 'granny', text: 'Granny Willow', sub: 'click to chat', target: { kind: 'granny' } };
     const s = w.structureAt(tx, ty);
     if (s) {
       const [name, sub] = STRUCT_INFO[s.type];
       let sub2 = sub;
-      if (s.type === 'bin' && def && def.kind === 'produce') sub2 = `click to sell ${this.selected.n} ${def.name} for ${def.sell * this.selected.n}c`;
+      if (s.type === 'gate' && !this.meadowOwned) return { key: 'sgate', text: 'Riverside Meadow — for sale', sub: `click to buy it for ${fmt(MEADOW_PRICE)}c`, target: { kind: 'struct', s } };
+      if (s.type === 'bin' && def && def.kind === 'produce') sub2 = `click to sell ${this.selected.n} ${def.name} for ${fmt(def.sell * this.selected.n)}c`;
       return { key: 's' + s.type, text: name, sub: sub2, target: { kind: 'struct', s } };
     }
     const o = w.objs.get(i);
@@ -349,6 +384,7 @@ export class Game {
     const def = this.selectedDef;
     const hand = this.sel === HAND;
     this.scareButterflies(this.hover.wx, this.hover.wy);
+    if (this.isLocked(tx, ty)) { this.hooks.confirmMeadow?.(); this.drag = { mode: 'none' }; return; }
 
     if (this.interact(tx, ty)) { this.drag = { mode: 'none' }; return; }
     const o = w.objs.get(i);
@@ -392,6 +428,7 @@ export class Game {
       const steps = Math.max(Math.abs(tx - d.last.tx), Math.abs(ty - d.last.ty));
       for (let k = 1; k <= steps; k++) {
         const x = Math.round(d.last.tx + ((tx - d.last.tx) * k) / steps), y = Math.round(d.last.ty + ((ty - d.last.ty) * k) / steps);
+        if (this.isLocked(x, y)) continue;
         if (d.mode === 'harvest') {
           const i = this.world.idx(x, y);
           const c = this.world.crops.get(i);
@@ -425,7 +462,7 @@ export class Game {
     const w = this.world;
     const h = this.hover;
     let dest = c.from;
-    if (!cancel && h && this.canDropAt(h.tx, h.ty)) dest = w.idx(h.tx, h.ty);
+    if (!cancel && h && this.canDropAt(h.tx, h.ty) && !this.isLocked(h.tx, h.ty)) dest = w.idx(h.tx, h.ty);
     if (w.objs.has(dest)) { const f = w.freeTileNear(dest % MAP_W, (dest / MAP_W) | 0); dest = f ? w.idx(f.tx, f.ty) : c.from; }
     w.objs.set(dest, c.obj);
     audio.play('drop');
@@ -501,8 +538,10 @@ export class Game {
     const G = LAYOUT.garden;
     if (w.weeds.size > 24) return;
     for (let k = 0; k < 80 && n > 0; k++) {
-      const tx = G.x0 - 3 + Math.floor(Math.random() * (G.x1 - G.x0 + 7));
-      const ty = G.y0 - 2 + Math.floor(Math.random() * (G.y1 - G.y0 + 5));
+      const Z = this.meadowOwned && Math.random() < 0.45 ? LAYOUT.meadow : G;
+      const tx = Z.x0 - 3 + Math.floor(Math.random() * (Z.x1 - Z.x0 + 7));
+      const ty = Z.y0 - 2 + Math.floor(Math.random() * (Z.y1 - Z.y0 + 5));
+      if (this.isLocked(tx, ty)) continue;
       const i = w.idx(tx, ty);
       if (!w.isOpen(tx, ty) || w.crops.has(i) || w.weeds.has(i) || w.floor[i]) continue;
       w.weeds.set(i, Math.floor(Math.random() * ART.weeds.length));
@@ -832,6 +871,7 @@ export class Game {
     }
     if (w.ground[i] === G_WATER) {
       audio.play('plop');
+      this.scareFish(this.hover.wx, this.hover.wy);
       this.particles.add({ type: 'ripple', x: this.hover.wx, y: this.hover.wy, life: 0.8, r: 10, color: '#d4efff' });
       this.particles.add({ type: 'ripple', x: this.hover.wx, y: this.hover.wy, life: 0.5, r: 5, color: '#d4efff' });
       return;
@@ -867,10 +907,28 @@ export class Game {
     this.particles.burst(tx * TILE + 8, ty * TILE + 6, 4, { color: ['#d8a868', '#b07a4a'], speed: 30, vz: 40, g: 250, life: 0.4 });
     this.cursorAnim('knock', 0.18);
     if (o.hits < 3) { audio.play('knock', { n: o.hits }); return; }
-    if (!this.freeSlotsFor(o.items)) {
+    // unpack whatever fits; anything left stays in the crate
+    const got = [], left = [];
+    for (const [id, n] of o.items) {
+      let fit = 0;
+      for (let k = n; k > 0; k = Math.floor(k / 2)) if (this.freeSlotsFor([...got, [id, k]])) { fit = k; break; }
+      while (fit < n && this.freeSlotsFor([...got, [id, fit + 1]])) fit++;
+      if (fit) got.push([id, fit]);
+      if (fit < n) left.push([id, n - fit]);
+    }
+    if (!got.length) {
       o.hits = 2;
       audio.play('error');
-      this.hint('Your bag is too full to unpack this. Sell or tidy some things first.');
+      this.hint('Your bag is full — sell or tidy some things, then knock again.');
+      return;
+    }
+    if (left.length) {
+      o.items = left;
+      o.hits = 2;
+      audio.play('crate');
+      got.forEach(([id, n], k) => { this.addItem(id, n, true); setTimeout(() => this.flyToBag(ART.icons[ITEMS[id].icon], tx * TILE + 8, ty * TILE + 2), k * 110); });
+      this.hooks.invChanged?.();
+      this.hint('Your bag filled up! The rest is still in the crate — knock again when you have room.');
       return;
     }
     this.world.objs.delete(i);
@@ -929,6 +987,10 @@ export class Game {
       case 'sign':
         this.hooks.dialog?.('Sign', ['"Willow Garden — plant with love, water with patience."'], null);
         break;
+      case 'gate':
+        if (this.meadowOwned) this.visitMeadow();
+        else this.hooks.confirmMeadow?.();
+        break;
     }
     this.fx.shake.set('s' + s.type, 0.2);
     return true;
@@ -937,7 +999,7 @@ export class Game {
   binFx(s, gain) {
     if (!gain) return;
     const x = (s.tx + 1) * TILE, y = s.ty * TILE;
-    this.particles.text(x, y - 6, `+${gain}c`, '#fff3a0');
+    this.particles.text(x, y - 6, `+${fmt(gain)}c`, '#fff3a0');
     this.particles.sparkle(x, y, 8);
     this.fx.shake.set('s' + s.type, 0.25);
   }
@@ -978,6 +1040,7 @@ export class Game {
 
   buy(id, n = 1) {
     const def = ITEMS[id];
+    n = Math.max(1, Math.min(9999, Math.floor(Number(n) || 1)));
     if (def.kind === 'tool') {
       const inCrates = [...this.world.objs.values()].some((o) => o.type === 'crate' && o.items.some(([x]) => x === id));
       if (this.count(id) > 0 || inCrates || this.pendingOrder.some(([x]) => x === id)) { this.toast(`You already have a ${def.name}.`); audio.play('error'); return false; }
@@ -1074,7 +1137,87 @@ export class Game {
     this.critters.fireflies = F.filter((f) => f.life > 0 && (night || f.life > 4));
   }
 
+  /* ---------------------------- fish ---------------------------- */
+
+  initFish() {
+    const w = this.world;
+    this.deepWater = [];
+    for (let i = 0; i < w.waterDepth.length; i++) if (w.ground[i] === G_WATER && w.waterDepth[i] >= 1 && w.waterDepth[i] < 255) this.deepWater.push(i);
+    const F = (this.critters.fish = []);
+    const bodies = [[LAYOUT.pond.cx, LAYOUT.pond.cy, 9], [LAYOUT.lake.cx, LAYOUT.lake.cy, 5]];
+    for (const [cx, cy, n] of bodies) {
+      const near = this.deepWater.filter((i) => Math.hypot((i % MAP_W) - cx, ((i / MAP_W) | 0) - cy) < 8);
+      for (let k = 0; k < n && near.length; k++) {
+        const i = pick(near);
+        F.push({
+          x: (i % MAP_W) * TILE + rand(3, 13), y: ((i / MAP_W) | 0) * TILE + rand(3, 13), a: rand(Math.PI * 2), sp: rand(5, 11),
+          tx: 0, ty: 0, retarget: 0, v: Math.random() < 0.25 ? 4 : Math.floor(rand(4)), t: rand(10), flee: 0, hidden: 0, jumpT: rand(8, 30),
+        });
+      }
+    }
+  }
+
+  isDeep(x, y) {
+    const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
+    if (!this.world.inBounds(tx, ty)) return false;
+    const i = this.world.idx(tx, ty);
+    return this.world.ground[i] === G_WATER && this.world.waterDepth[i] >= 1;
+  }
+
+  updateFish(dt) {
+    for (const f of this.critters.fish) {
+      f.t += dt;
+      if (f.hidden > 0) { f.hidden -= dt; continue; }
+      f.retarget -= dt;
+      f.flee = Math.max(0, f.flee - dt);
+      if (f.retarget <= 0 || Math.hypot(f.tx - f.x, f.ty - f.y) < 3) {
+        for (let k = 0; k < 12; k++) {
+          const nx = f.x + rand(-50, 50), ny = f.y + rand(-40, 40);
+          if (this.isDeep(nx, ny)) { f.tx = nx; f.ty = ny; break; }
+        }
+        f.retarget = rand(2, 7);
+      }
+      const want = Math.atan2(f.ty - f.y, f.tx - f.x);
+      let da = want - f.a;
+      while (da > Math.PI) da -= Math.PI * 2;
+      while (da < -Math.PI) da += Math.PI * 2;
+      f.a += da * Math.min(1, dt * (f.flee ? 8 : 2));
+      const sp = f.sp * (f.flee ? 5 : 1) * (0.7 + 0.3 * Math.sin(f.t * 3));
+      const nx = f.x + Math.cos(f.a) * sp * dt, ny = f.y + Math.sin(f.a) * sp * dt;
+      if (this.isDeep(nx, ny)) { f.x = nx; f.y = ny; } else { f.a += Math.PI * 0.6; f.retarget = 0; }
+      // the occasional happy leap
+      f.jumpT -= dt;
+      if (f.jumpT <= 0) {
+        f.jumpT = rand(10, 35);
+        const tx = Math.floor(f.x / TILE), ty = Math.floor(f.y / TILE);
+        if (this.hooks.isVisible?.(this.world.idx(tx, ty)) && !this.isLocked(tx, ty)) {
+          f.hidden = 0.75;
+          const dir = Math.cos(f.a) >= 0 ? 1 : -1;
+          this.particles.add({ type: 'ripple', x: f.x, y: f.y + 2, life: 0.6, r: 7, color: '#d4efff' });
+          this.particles.add({
+            type: 'fish', spr: ART.fish[f.v], flip: dir < 0, x: f.x, y: f.y, vx: dir * 14, vy: 0, z: 0, vz: 75, g: 200, life: 0.75, drag: 0,
+            onEnd: (p) => { this.particles.water(p.x, p.y + 2, 6); f.x = this.isDeep(p.x, p.y) ? p.x : f.x; },
+          });
+          audio.play('plop');
+        }
+      }
+    }
+  }
+
+  scareFish(x, y) {
+    for (const f of this.critters.fish) {
+      const d = Math.hypot(f.x - x, f.y - y);
+      if (d < 36) {
+        f.flee = 1.2;
+        f.tx = f.x + ((f.x - x) / (d || 1)) * 40;
+        f.ty = f.y + ((f.y - y) / (d || 1)) * 40;
+        f.retarget = 1.2;
+      }
+    }
+  }
+
   updateAmbientFx(dt, view) {
+    this.updateFish(dt);
     const H = this.world.structures.find((s) => s.type === 'house');
     if (H && Math.random() < dt * 3) {
       const ch = ART.house.chimney;
@@ -1097,9 +1240,11 @@ export class Game {
     this.fx.sprinklers = this.fx.sprinklers.filter((s) => s.t < 1.4);
     if (view && Math.random() < dt * 2) {
       for (const [i, c] of this.world.crops) {
-        if (stageOf(c) !== 4 || Math.random() > 0.08 || !this.hooks.isVisible?.(i)) continue;
+        const glow = CROPS[c.id].glow;
+        if (stageOf(c) !== 4 || Math.random() > (glow ? 0.25 : 0.08) || !this.hooks.isVisible?.(i)) continue;
         const tx = i % MAP_W, ty = (i / MAP_W) | 0;
-        this.particles.sparkle(tx * TILE + 8 + rand(-5, 5), ty * TILE + rand(0, 8), 1);
+        const col = glow ? [`rgb(${glow.join(',')})`, '#ffffff'] : undefined;
+        this.particles.sparkle(tx * TILE + 8 + rand(-5, 5), ty * TILE + rand(CROPS[c.id].rare ? -6 : 0, 8), 1, col);
       }
     }
   }
@@ -1115,6 +1260,7 @@ export class Game {
       version: VERSION, savedAt: Date.now(), name: this.name, mode: this.mode, coins: this.coins, time: this.time,
       weather: this.weather, inv: this.inv, sel: this.sel, cam: this.view ? { x: this.view.cam.x, y: this.view.cam.y } : null,
       world: this.world.serialize(), tutorial: this.tutorial.serialize(), stats: this.stats,
+      meadow: this.meadowOwned, playerId: this.playerId,
     };
   }
 
@@ -1131,6 +1277,8 @@ export class Game {
     this.sel = d.sel ?? HAND;
     if (this.sel >= 0 && !this.inv[this.sel]) this.sel = HAND;
     this.savedCam = d.cam;
+    this.meadowOwned = !!d.meadow;
+    this.playerId = d.playerId || null;
     this.stats = { ...this.stats, ...d.stats };
   }
 }

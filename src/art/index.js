@@ -1,8 +1,8 @@
 // Builds and caches every sprite once at boot.
-import { buildCharacter, buildGranny, buildCropSprites, buildItemSprites, buildSeedPacket, buildCursorSprites } from './sprites.js';
+import { buildCharacter, buildGranny, buildCropSprites, buildItemSprites, buildSeedPacket, buildCursorSprites, buildFish } from './sprites.js';
 import {
   makeTree, makeBush, makeRock, makeStump, makeHouse, makeStall, makeStallSign, makeWell, makeBin, makeSign,
-  makeLilyPad, makeReeds, makeDeco, makeButterfly, makeFence, makeCrate,
+  makeLilyPad, makeReeds, makeDeco, makeButterfly, makeFence, makeCrate, makeGate,
 } from './procedural.js';
 import { CROPS } from '../data/crops.js';
 import { ITEMS } from '../data/items.js';
@@ -54,6 +54,8 @@ export function buildArt() {
   ART.weeds = ART.cursor.weeds;
   ART.crate = makeCrate(false);
   ART.giftCrate = makeCrate(true);
+  ART.gate = { closed: makeGate(false), open: makeGate(true) };
+  ART.fish = buildFish();
   ART.fences = [];
   for (let m = 0; m < 16; m++) ART.fences.push(makeFence(m));
   return ART;

@@ -24,8 +24,13 @@ No goals, no timers, no pressure.
   when you poke them, the pond ripples, butterflies flee your hand, weeds sometimes hide seeds in their roots,
   and at night your hand carries a soft glow.
 
-- **11 crops** — radish, carrot, lettuce, potato, strawberry, tomato, corn, blueberry, sunflower, pumpkin and
-  watermelon, each with its own growth stages. Some keep fruiting after you harvest them.
+- **31 crops** — 11 everyday crops plus **20 rare seeds**: beetroot and pineapple, grapes and coffee,
+  dragon fruit and starfruit, all the way up to the glowing Moonflower, Golden Pumpkin, Fire Lily, Frost Melon
+  and the legendary **Dewdrop Lily**, the best seed in the game. Magical crops glow at night.
+- **Buy in bulk** — type exactly how many seeds you want (or hit Max) in Basil's shop.
+- **The Riverside Meadow** — save up 50,000 coins to open the gate to a whole second garden plot with
+  its own lake, stream and Shipping Bin.
+- **Fish** swim in the pond and the meadow lake (and sometimes jump).
 - **Real watering** — crops only grow while their soil is wet. Wet soil turns dark and dries out after about a day.
 - **Tools** — hoe, watering can, water bucket (soaks 3×3), shovel and sickle (harvests 3×3).
 - **Sprinklers** in three tiers that water your crops every morning, plus fertilizer for faster growth.
@@ -49,7 +54,7 @@ and has no build step.
 | Click + drag | Sweep the tool over many tiles · with the hand: move placed things or drag the view |
 | Right-drag, middle-drag or WASD | Look around |
 | Right click | Put the tool away (back to the hand) |
-| Scroll wheel / + − | Zoom |
+| Scroll wheel / + − | Zoom (scroll down to zoom out; your zoom is remembered) |
 | 1 – 0, Q | Pick a toolbar slot, or the hand |
 | Drag a toolbar slot | Drop it on the Shipping Bin to sell, or on a tile to use it |
 | Tab | Backpack |
@@ -96,6 +101,8 @@ src/art/palette.js           palette + string-art → sprite builder (auto-outli
 src/art/sprites.js           hand-made pixel art: characters, crops, items
 src/art/procedural.js        painted art: trees, cottage, market stall, well, decor
 src/data/crops.js            crop stats (growth hours, prices, regrowth)
+src/art/crops2.js            art for the 20 rare crops (plant archetypes + fruit sprites)
+src/game/leaderboard.js      optional global leaderboard, off by default (see docs/LEADERBOARD_SETUP.md)
 src/data/items.js            every item + the shop lists
 src/game/world.js            map layout & generation, save format for tiles
 src/game/ground.js           pixel-level ground renderer (grass, soil, water, paths)
@@ -117,7 +124,8 @@ tools/art-preview.html       shows every sprite, handy while editing art
 
 - Game code & art: the Dewdrop Garden authors.
 - Font: [Pixelify Sans](https://github.com/eifetx/Pixelify-Sans) by The Pixelify Sans Project Authors, SIL Open Font License
-  (see `assets/fonts/OFL.txt`).
+  (see `assets/fonts/OFL.txt`). The bundled copies are static Regular/SemiBold cuts with the "5" and "7" redrawn so
+  numbers are easier to read.
 
 ## License
 

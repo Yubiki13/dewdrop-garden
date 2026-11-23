@@ -60,7 +60,7 @@ export function pickSaveFile() {
   });
 }
 
-const DEFAULT_SETTINGS = { music: 0.55, amb: 0.6, sfx: 0.7, zoom: 1, thirsty: true, grid: false };
+const DEFAULT_SETTINGS = { music: 0.55, amb: 0.6, sfx: 0.7, zoomLevel: 3, thirsty: true, grid: false };
 
 export function loadSettings() {
   try {

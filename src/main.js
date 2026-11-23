@@ -6,6 +6,7 @@ import { Game } from './game/game.js';
 import { Input } from './core/input.js';
 import { audio } from './core/audio.js';
 import { UI } from './ui/ui.js';
+import { leaderboard } from './game/leaderboard.js';
 import { LAYOUT } from './game/world.js';
 import { readSave, saveMeta, writeSave, writeRawSave, downloadSave, pickSaveFile, loadSettings, storeSettings } from './game/save.js';
 import { TILE, G_SOIL } from './config.js';
@@ -15,7 +16,7 @@ import { makeRng } from './core/util.js';
 const DEBUG = new URLSearchParams(location.search).has('debug');
 
 async function boot() {
-  try { await document.fonts.load('16px Pixelify'); } catch { /* ignore */ }
+  try { await Promise.all([document.fonts.load('16px Pixelify'), document.fonts.load('600 16px Pixelify')]); } catch { /* ignore */ }
   buildArt();
   installFrames();
   setFavicon();
@@ -24,7 +25,8 @@ async function boot() {
   const overlay = document.getElementById('overlay');
   const settings = loadSettings();
   const renderer = new Renderer(canvas, overlay);
-  renderer.setZoom(settings.zoom);
+  renderer.setZoom(settings.zoomLevel);
+  renderer.onZoom = (z) => { settings.zoomLevel = z; storeSettings(settings); };
   const input = new Input(canvas);
 
   const app = {
@@ -51,7 +53,11 @@ async function boot() {
       else renderer.centerOn(LAYOUT.view.tx * TILE + 8, LAYOUT.view.ty * TILE);
       playTime = 0;
     },
-    saveNow() { if (this.game) writeSave(this.game); },
+    saveNow() {
+      if (!this.game) return;
+      writeSave(this.game);
+      leaderboard.submit(this.game);
+    },
     quitToTitle() {
       this.saveNow();
       ui.unbindGame();
@@ -60,7 +66,6 @@ async function boot() {
     },
     applySettings() {
       audio.setVolumes({ music: settings.music, amb: settings.amb, sfx: settings.sfx });
-      if (renderer.zoom !== settings.zoom) renderer.setZoom(settings.zoom);
       storeSettings(settings);
     },
     exportSave() {
@@ -90,7 +95,7 @@ async function boot() {
   ui.showTitle(saveMeta());
   document.getElementById('loading')?.remove();
 
-  const wake = () => { audio.init(); app.applySettings(); };
+  const wake = () => { audio.init(); audio.setVolumes({ music: settings.music, amb: settings.amb, sfx: settings.sfx }); };
   addEventListener('pointerdown', wake);
   addEventListener('keydown', wake);
 

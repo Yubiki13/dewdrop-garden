@@ -2,10 +2,12 @@
 import { ART, iconURL } from '../art/index.js';
 import { sprite, drawSprite } from '../art/palette.js';
 import { ITEMS, SHOP_SEEDS, SHOP_GOODS, isStackable, STACK_MAX } from '../data/items.js';
+import { CHANGELOG } from '../data/changelog.js';
 import { CROPS } from '../data/crops.js';
 import { audio } from '../core/audio.js';
 import { formatTime, makeCanvas } from '../core/util.js';
-import { HAND } from '../game/game.js';
+import { HAND, MEADOW_PRICE } from '../game/game.js';
+import { leaderboard, STATS } from '../game/leaderboard.js';
 import { VERSION } from '../config.js';
 
 const $ = (sel, el = document) => el.querySelector(sel);
@@ -14,6 +16,7 @@ const h = (html) => {
   t.innerHTML = html.trim();
   return t.content.firstElementChild;
 };
+const fmt = (n) => Math.floor(n).toLocaleString('en-US');
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 const WEATHER_ICONS = {
@@ -32,6 +35,7 @@ export class UI {
     this.nameTimer = 0;
     this.weatherIcons = {};
     this.coinURL = ART.icons.coin.img.toDataURL();
+    this.trophyURL = sprite(['..YYYYY..', 'yyYZYYYyy', 'y.YZYYY.y', '.y.YYY.y.', '....Y....', '...yYy...', '..yyyyy..'], { outlineStrength: 0.6 }).img.toDataURL();
     for (const [k, rows] of Object.entries(WEATHER_ICONS)) this.weatherIcons[k] = sprite(rows, { outlineStrength: 0.5 }).img.toDataURL();
     this.build();
     this.bindKeys();
@@ -72,6 +76,7 @@ export class UI {
       <div id="vignette"></div>
       <div id="hud" class="hidden">
         <div id="clock" class="panel"></div>
+        <button id="lbbtn" class="btn small" title="Leaderboard"><img class="icon" style="width:calc(var(--p)*11)"> Leaderboard</button>
         <div id="quest" class="panel hidden"></div>
         <div id="hotbar"></div>
         <div id="itemname" class="dark" style="opacity:0"></div>
@@ -86,6 +91,9 @@ export class UI {
       <img id="held" class="icon hidden">
       <div id="fade"><div class="daytext"></div></div>`;
     $('#vignette').style.pointerEvents = 'none';
+    $('#lbbtn img').src = this.trophyURL;
+    if (!leaderboard.enabled) $('#lbbtn').classList.add('hidden');
+    $('#lbbtn').addEventListener('click', () => { audio.play('ui'); this.openLeaderboard(); });
     $('#dialog').addEventListener('click', () => this.advanceDialog());
     document.getElementById('world').addEventListener('mousedown', () => { if (this.dialogState) this.advanceDialog(); });
     $('#modal-root').addEventListener('mousedown', (e) => {
@@ -149,6 +157,7 @@ export class UI {
       openShop: () => this.openShop(),
       openSell: () => this.openSell(),
       confirmSleep: () => this.confirmSleep(),
+      confirmMeadow: () => this.confirmMeadow(),
       newDay: () => this.onNewDay(),
       isVisible: (i) => this.app.renderer.isVisibleTile(i),
       toolbarWorldPos: () => {
@@ -306,7 +315,7 @@ export class UI {
     const rain = g.weather.rain;
     const icon = rain ? 'rain' : night ? 'moon' : 'sun';
     const wtxt = rain ? 'Rainy' : night ? 'Clear night' : 'Sunny';
-    const coins = g.sandbox ? '∞' : g.coins.toLocaleString();
+    const coins = g.sandbox ? '∞' : fmt(g.coins);
     const key = `${g.day}|${formatTime(g.minuteOfDay)}|${icon}|${coins}`;
     if (!force && key === this._clockKey) return;
     this._clockKey = key;
@@ -314,7 +323,7 @@ export class UI {
       <div class="row"><span class="day">Day ${g.day}</span><span class="time">${formatTime(g.minuteOfDay)}</span></div>
       <div class="row"><img class="icon" src="${this.weatherIcons[icon]}" style="width:calc(var(--p)*11)"><span class="weather">${wtxt}${g.weather.tomorrow && hr > 12 ? ' · rain tomorrow' : ''}</span></div>
       <div class="sep"></div>
-      <div class="row"><img class="icon" src="${this.coinURL}" style="width:calc(var(--p)*14)"><span class="coins">${coins}</span></div>`;
+      <div class="row"><img class="icon" src="${this.coinURL}" style="width:calc(var(--p)*14)"><span class="coins num">${coins}</span></div>`;
   }
 
   renderQuest() {
@@ -462,7 +471,7 @@ export class UI {
     const g = this.game;
     const root = $('#modal-root .invgrid');
     if (!root) return;
-    $('#modal-root h2 .sub').innerHTML = `<img class="icon" src="${this.coinURL}" style="width:calc(var(--p)*12)">${g.sandbox ? '∞' : g.coins}`;
+    $('#modal-root h2 .sub').innerHTML = this.coinsHTML(g.sandbox ? '∞' : g.coins, 12);
     root.innerHTML = '';
     for (let i = 0; i < g.inv.length; i++) {
       if (i === 10) root.appendChild(h('<div class="rowsep"></div>'));
@@ -553,63 +562,140 @@ export class UI {
 
   /* ---------------------------- shop ---------------------------- */
 
-  openShop(tab = 'seeds') {
+  openShop(tab = this.shopTab || 'seeds') {
+    const tabs = [['seeds', 'Seeds'], ['goods', 'Tools &amp; Decor'], ['land', 'Land']];
+    if (!tabs.some(([k]) => k === tab)) tab = 'seeds';
     const el = h(`<div class="modal panel">
       <button class="btn close">✕</button>
       <h2>Basil's Market <span class="sub"></span></h2>
-      <div class="tabs">
-        <button class="btn small ${tab === 'seeds' ? 'on' : ''}" data-tab="seeds" style="height:calc(var(--p)*14)">Seeds</button>
-        <button class="btn small ${tab === 'goods' ? 'on' : ''}" data-tab="goods" style="height:calc(var(--p)*14)">Tools &amp; Decor</button>
-      </div>
-      <div class="scroll" style="max-height:62vh"><div class="shoplist"></div></div>
-      <div class="hint">Click to buy one · Shift-click to buy five · Basil delivers your order in a crate when you close the shop</div>
+      <div class="tabs">${tabs.map(([k, n]) => `<button class="btn small ${tab === k ? 'on' : ''}" data-tab="${k}" style="height:calc(var(--p)*14)">${n}</button>`).join('')}</div>
+      <div class="scroll" style="max-height:60vh"><div class="shoplist"></div></div>
+      <div class="hint">Type how many you want, or press Max · Basil delivers everything in a crate when you close the shop</div>
     </div>`);
     this.openModal('shop', el);
     this.shopTab = tab;
+    this.shopQty ||= {};
     el.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => {
       this.shopTab = b.dataset.tab;
       el.querySelectorAll('[data-tab]').forEach((x) => x.classList.toggle('on', x === b));
       audio.play('ui');
       this.renderShop();
+      $('#modal-root .scroll').scrollTop = 0;
     }));
     this.renderShop();
+  }
+
+  coinsHTML(n, w = 11) {
+    return `<img class="icon" src="${this.coinURL}" style="width:calc(var(--p)*${w})"><span class="num">${typeof n === 'number' ? fmt(n) : n}</span>`;
   }
 
   renderShop() {
     const g = this.game;
     const list = $('#modal-root .shoplist');
     if (!list) return;
-    $('#modal-root h2 .sub').innerHTML = `<img class="icon" src="${this.coinURL}" style="width:calc(var(--p)*12)">${g.sandbox ? '∞' : g.coins}`;
-    const ids = this.shopTab === 'seeds' ? SHOP_SEEDS : SHOP_GOODS;
+    const scroll = $('#modal-root .scroll');
+    const keepScroll = scroll ? scroll.scrollTop : 0;
+    $('#modal-root h2 .sub').innerHTML = this.coinsHTML(g.sandbox ? '∞' : g.coins, 12);
     list.innerHTML = '';
+    if (this.shopTab === 'land') { this.renderLand(list); return; }
+    const ids = this.shopTab === 'seeds' ? SHOP_SEEDS : SHOP_GOODS;
     for (const id of ids) {
       const def = ITEMS[id];
       const owned = g.count(id);
       const isTool = def.kind === 'tool';
-      const price = g.sandbox ? 'Free' : def.price;
       const cant = !g.sandbox && def.price > g.coins;
       let desc = def.desc;
       if (def.kind === 'seed') {
         const c = CROPS[def.crop];
-        desc = `${c.hours}h to grow${c.regrow ? ` · regrows ${c.regrow}h` : ''} · sells ${c.sell}c${c.yield ? ' ×' + c.yield : ''}`;
+        desc = `${c.hours}h to grow${c.regrow ? ` · regrows every ${c.regrow}h` : ''} · sells ${fmt(c.sell)}c${c.yield ? ' ×' + c.yield : ''}`;
+        if (id === 'seed_dewdroplily') desc += ' · the best seed!';
       }
+      const qty = this.shopQty[id] || 1;
       const row = h(`<div class="shoprow paper ${cant ? 'cant' : ''}">
         <div class="iconbox slot">${this.slotIcon({ id })}</div>
-        <div class="info"><div class="nm">${esc(def.name)}</div><div class="ds">${esc(desc)}</div></div>
-        <div class="own">${isTool ? (owned ? 'Owned' : '') : owned ? 'Have ' + owned : ''}</div>
-        <div class="price">${typeof price === 'number' ? `<img class="icon" src="${this.coinURL}" style="width:calc(var(--p)*11)">` : ''}${price}</div>
+        <div class="info"><div class="nm">${esc(def.name)}${def.kind === 'seed' && CROPS[def.crop].rare ? ' <span class="tag new">new</span>' : ''}${def.kind === 'seed' && CROPS[def.crop].glow ? ' <span class="tag">glows</span>' : ''}</div><div class="ds">${esc(desc)}</div>
+          <div class="own">${isTool ? (owned ? 'Owned' : '') : owned ? 'You have ' + fmt(owned) : ''}</div></div>
+        <div class="price">${g.sandbox ? 'Free' : this.coinsHTML(def.price)}${isTool || g.sandbox ? '' : '<span class="each">each</span>'}</div>
+        <div class="buybox">
+          ${isTool ? '' : `<div class="qty"><button class="btn small minus">−</button><input type="number" min="1" max="9999" value="${qty}"><button class="btn small plus">+</button></div>
+          <button class="btn small max">Max</button>`}
+          <button class="btn small buy"></button>
+        </div>
       </div>`);
-      row.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        if (g.buy(id, e.shiftKey && !isTool ? 5 : 1)) {
+      const inp = $('input', row);
+      const buyBtn = $('.buy', row);
+      const getQty = () => (isTool ? 1 : Math.max(1, Math.min(9999, Math.floor(Number(inp.value) || 1))));
+      const sync = () => {
+        const n = getQty();
+        if (!isTool) this.shopQty[id] = n;
+        const total = def.price * n;
+        buyBtn.innerHTML = g.sandbox ? 'Get' : `Buy · ${fmt(total)}`;
+        buyBtn.disabled = !g.sandbox && total > g.coins;
+      };
+      sync();
+      if (inp) {
+        inp.addEventListener('input', sync);
+        inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') buyBtn.click(); if (e.key === 'Escape') this.closeModal(); });
+        inp.addEventListener('focus', () => inp.select());
+        $('.minus', row).addEventListener('click', () => { inp.value = Math.max(1, getQty() - 1); sync(); audio.play('select'); });
+        $('.plus', row).addEventListener('click', () => { inp.value = Math.min(9999, getQty() + 1); sync(); audio.play('select'); });
+        $('.max', row).addEventListener('click', () => {
+          inp.value = g.sandbox ? 999 : Math.max(1, Math.min(9999, Math.floor(g.coins / def.price)));
+          sync(); audio.play('select');
+        });
+      }
+      buyBtn.addEventListener('click', () => {
+        const n = getQty();
+        if (g.buy(id, n)) {
           row.animate([{ transform: 'scale(0.98)' }, { transform: 'scale(1)' }], { duration: 150 });
+          this.toast(`Ordered ${n > 1 ? fmt(n) + '× ' : ''}${def.name}`, id);
         }
         this.renderShop();
         this.renderClock(true);
       });
-      row.addEventListener('mouseenter', () => { row.title = def.desc; });
       list.appendChild(row);
     }
+    if (scroll) scroll.scrollTop = keepScroll;
+  }
+
+  renderLand(list) {
+    const g = this.game;
+    const owned = g.meadowOwned;
+    const price = MEADOW_PRICE;
+    const row = h(`<div class="shoprow paper land ${!owned && !g.sandbox && g.coins < price ? 'cant' : ''}">
+      <div class="iconbox slot"><img class="icon" src="${this.meadowIcon()}" style="width:calc(var(--p)*18)"></div>
+      <div class="info"><div class="nm">Riverside Meadow</div>
+        <div class="ds">A whole second garden plot past the trees south of your garden: a big open meadow with its own stream,
+        fish, and a second Shipping Bin. Lots of room to grow.</div></div>
+      <div class="price">${owned ? 'Yours!' : g.sandbox ? 'Free' : this.coinsHTML(price)}</div>
+      <div class="buybox"><button class="btn small buy">${owned ? 'Visit' : 'Buy land'}</button></div>
+    </div>`);
+    const btn = $('.buy', row);
+    if (!owned && !g.sandbox && g.coins < price) btn.disabled = true;
+    btn.addEventListener('click', () => {
+      if (owned) { this.closeModal(); g.visitMeadow(); return; }
+      this.confirm('Buy the Riverside Meadow?', `This costs ${fmt(price)} coins. The gate opens right away.`, 'Buy it!', () => {
+        if (g.buyMeadow()) this.renderClock(true);
+      }, 'Not yet');
+    });
+    list.appendChild(row);
+    list.appendChild(h(`<div class="hint" style="margin-top:var(--p)">More land may come in a future update.</div>`));
+  }
+
+  meadowIcon() {
+    if (!this._meadowIcon) {
+      const c = makeCanvas(18, 18);
+      const x = c.getContext('2d');
+      x.fillStyle = '#4fa64a'; x.fillRect(1, 3, 16, 14);
+      x.fillStyle = '#3a7cbc'; x.fillRect(1, 12, 16, 3);
+      x.fillStyle = '#8ac4f0'; x.fillRect(3, 13, 3, 1); x.fillRect(10, 12, 3, 1);
+      x.fillStyle = '#7a4a30'; for (let i = 2; i < 17; i += 3) x.fillRect(i, 7, 1, 4);
+      x.fillStyle = '#b07a4a'; x.fillRect(1, 8, 16, 1);
+      x.fillStyle = '#f08ac0'; x.fillRect(4, 4, 1, 1); x.fillRect(13, 5, 1, 1);
+      x.fillStyle = '#fff3a0'; x.fillRect(8, 4, 1, 1);
+      this._meadowIcon = c.toDataURL();
+    }
+    return this._meadowIcon;
   }
 
   /* ---------------------------- shipping bin ---------------------------- */
@@ -627,7 +713,7 @@ export class UI {
     this.openModal('sell', el);
     $('.sellall', el).addEventListener('click', () => {
       const got = this.game.sellAllProduce();
-      if (got) this.toast(`Sold everything for ${got} coins!`, 'coin');
+      if (got) this.toast(`Sold everything for ${fmt(got)} coins!`, 'coin');
       this.renderSell();
     });
     this.renderSell();
@@ -637,7 +723,7 @@ export class UI {
     const g = this.game;
     const list = $('#modal-root .shoplist');
     if (!list) return;
-    $('#modal-root h2 .sub').innerHTML = `<img class="icon" src="${this.coinURL}" style="width:calc(var(--p)*12)">${g.sandbox ? '∞' : g.coins}`;
+    $('#modal-root h2 .sub').innerHTML = this.coinsHTML(g.sandbox ? '∞' : g.coins, 12);
     list.innerHTML = '';
     let total = 0;
     g.inv.forEach((s, i) => {
@@ -646,8 +732,8 @@ export class UI {
       total += def.sell * s.n;
       const row = h(`<div class="shoprow paper">
         <div class="iconbox slot">${this.slotIcon(s)}</div>
-        <div class="info"><div class="nm">${esc(def.name)} <span style="color:var(--ink-soft);font-weight:400">×${s.n}</span></div><div class="ds">${def.sell}c each</div></div>
-        <div class="price">+${def.sell * s.n}</div>
+        <div class="info"><div class="nm">${esc(def.name)} <span style="color:var(--ink-soft);font-weight:400">×${s.n}</span></div><div class="ds">${fmt(def.sell)}c each</div></div>
+        <div class="price"><span class="num">+${fmt(def.sell * s.n)}</span></div>
       </div>`);
       row.addEventListener('mousedown', (e) => {
         e.preventDefault();
@@ -659,7 +745,84 @@ export class UI {
     });
     if (!total) list.appendChild(h(`<div class="paper" style="padding:calc(var(--p)*4);font-size:calc(var(--p)*7.5);color:var(--ink-soft)">Nothing to sell yet — harvest some crops and bring them here!</div>`));
     const btn = $('#modal-root .sellall');
-    if (btn) { btn.disabled = !total; btn.textContent = total ? `Sell everything (+${total})` : 'Sell everything'; }
+    if (btn) { btn.disabled = !total; btn.textContent = total ? `Sell everything (+${fmt(total)})` : 'Sell everything'; }
+  }
+
+  confirmMeadow() {
+    const g = this.game;
+    if (g.meadowOwned) { g.visitMeadow(); return; }
+    if (!g.sandbox && g.coins < MEADOW_PRICE) {
+      this.confirm('Riverside Meadow', `A whole second garden plot is waiting past this gate! It costs ${fmt(MEADOW_PRICE)} coins and you have ${fmt(g.coins)}. The new seeds are the fastest way to get there.`, 'Show me seeds', () => this.openShop('seeds'), 'Okay');
+      return;
+    }
+    this.confirm('Buy the Riverside Meadow?', `A whole second garden plot with its own stream and Shipping Bin, for ${g.sandbox ? 'free (sandbox)' : fmt(MEADOW_PRICE) + ' coins'}.`, 'Buy it!', () => { if (g.buyMeadow()) this.renderClock(true); }, 'Not yet');
+  }
+
+  openLeaderboard(back) {
+    const tabs = Object.entries(STATS).map(([k, v]) => `<button class="btn small" data-stat="${k}" style="height:calc(var(--p)*14)">${v.label}</button>`).join('');
+    const el = h(`<div class="modal panel" style="width:calc(var(--p)*200)">
+      <button class="btn close">✕</button>
+      <h2><img class="icon" src="${this.trophyURL}" style="width:calc(var(--p)*16)"> Leaderboard</h2>
+      <div class="tabs">${tabs}</div>
+      <div class="scroll lblist" style="max-height:52vh"></div>
+      <div class="lbme paper"></div>
+      <div class="hint">Every Cozy-mode garden in the world shows up here. Sandbox gardens don't count.</div>
+    </div>`);
+    this.openModal('leaderboard', el);
+    this.onModalClosed = (name) => { this.onModalClosed = null; if (name === 'leaderboard' && back) back(); };
+    this.lbStat ||= 'coins';
+    const list = $('.lblist', el);
+    const me = $('.lbme', el);
+    if (!leaderboard.enabled) {
+      list.innerHTML = `<div class="paper" style="padding:calc(var(--p)*4);font-size:calc(var(--p)*7);line-height:1.3">The global leaderboard isn't switched on for this copy of the game yet.</div>`;
+      $('.tabs', el).style.display = 'none';
+      me.style.display = 'none';
+      return;
+    }
+    const g = this.game;
+    me.innerHTML = g
+      ? `<span class="lbl">Your name</span><input type="text" maxlength="16" spellcheck="false" value="${esc(g.name)}"><button class="btn small" data-a="name">Save</button>
+         <span class="mine"></span>`
+      : '<span class="lbl">Start or continue a Cozy garden to join the board.</span>';
+    if (g) {
+      const inp = $('input', me);
+      inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') $('[data-a=name]', me).click(); if (e.key === 'Escape') this.closeModal(); });
+      $('[data-a=name]', me).addEventListener('click', async () => {
+        const n = inp.value.replace(/[^\p{L}\p{N} _.'!-]/gu, '').trim().slice(0, 16);
+        if (!n) return;
+        g.name = n;
+        inp.value = n;
+        audio.play('ui');
+        this.app.saveNow();
+        await leaderboard.submit(g, true);
+        load();
+      });
+    }
+    const load = async () => {
+      el.querySelectorAll('[data-stat]').forEach((b) => b.classList.toggle('on', b.dataset.stat === this.lbStat));
+      list.innerHTML = '<div class="lbmsg">Loading…</div>';
+      try {
+        if (g) await leaderboard.submit(g);
+        const rows = await leaderboard.top(this.lbStat, 50);
+        if (!document.body.contains(list)) return;
+        const stat = this.lbStat;
+        if (!rows.length) { list.innerHTML = '<div class="lbmsg">Nobody here yet. Be the first!</div>'; return; }
+        list.innerHTML = rows.map((r, i) => `<div class="lbrow paper ${r.id === leaderboard.uid ? 'me' : ''}">
+            <span class="rank r${i + 1}">${i + 1}</span>
+            <span class="who">${esc(r.name || 'Gardener')}${r.meadow ? ' <span class="tag">meadow</span>' : ''}</span>
+            <span class="val num">${stat === 'harvested' ? '' : `<img class="icon" src="${this.coinURL}" style="width:calc(var(--p)*10)">`}${fmt(r[stat] || 0)}</span>
+          </div>`).join('');
+        const mine = $('.mine', me);
+        if (mine && g) {
+          const idx = rows.findIndex((r) => r.id === leaderboard.uid);
+          mine.textContent = g.sandbox ? 'Sandbox gardens aren\'t ranked' : idx >= 0 ? `You're #${idx + 1}!` : 'Not in the top 50 yet';
+        }
+      } catch {
+        list.innerHTML = '<div class="lbmsg">Couldn\'t reach the leaderboard. Check your internet and try again.</div>';
+      }
+    };
+    el.querySelectorAll('[data-stat]').forEach((b) => b.addEventListener('click', () => { this.lbStat = b.dataset.stat; audio.play('ui'); load(); }));
+    load();
   }
 
   /* ---------------------------- sleep ---------------------------- */
@@ -701,8 +864,10 @@ export class UI {
       <div class="menu">
         <button class="btn" data-a="resume">Resume</button>
         <button class="btn" data-a="inv">Backpack</button>
+        ${leaderboard.enabled ? '<button class="btn" data-a="lb">Leaderboard</button>' : ''}
         <button class="btn" data-a="settings">Settings</button>
         <button class="btn" data-a="help">How to Play</button>
+        <button class="btn" data-a="news">What's New</button>
         <button class="btn" data-a="save">Save Game</button>
         <button class="btn" data-a="quit">Save &amp; Quit to Title</button>
       </div></div>`);
@@ -711,6 +876,8 @@ export class UI {
       const a = b.dataset.a;
       if (a === 'resume') this.closeModal();
       if (a === 'inv') this.openInventory();
+      if (a === 'news') this.openChangelog(() => this.openMenu());
+      if (a === 'lb') this.openLeaderboard(() => this.openMenu());
       if (a === 'settings') this.openSettings(() => this.openMenu());
       if (a === 'help') this.openHelp(() => this.openMenu());
       if (a === 'save') { this.app.saveNow(); this.toast('Game saved.'); this.closeModal(); }
@@ -726,9 +893,7 @@ export class UI {
       <div class="setrow"><label>Music</label><input type="range" min="0" max="100" data-v="music"></div>
       <div class="setrow"><label>Nature sounds</label><input type="range" min="0" max="100" data-v="amb"></div>
       <div class="setrow"><label>Sound effects</label><input type="range" min="0" max="100" data-v="sfx"></div>
-      <div class="setrow"><label>Zoom</label><div class="seg" data-seg="zoom">
-        <button class="btn" data-val="0">Far</button><button class="btn" data-val="1">Normal</button><button class="btn" data-val="2">Close</button></div></div>
-      <div class="setrow"><label>Thirsty plant icons (when watering)</label><div class="seg" data-seg="thirsty">
+<div class="setrow"><label>Thirsty plant icons (when watering)</label><div class="seg" data-seg="thirsty">
         <button class="btn" data-val="true">On</button><button class="btn" data-val="false">Off</button></div></div>
       <div class="setrow"><label>Tile grid</label><div class="seg" data-seg="grid">
         <button class="btn" data-val="true">On</button><button class="btn" data-val="false">Off</button></div></div>
@@ -810,9 +975,12 @@ export class UI {
       </div>
       ${saveMeta ? `<button class="btn" data-a="continue">Continue <span style="font-weight:400;font-size:calc(var(--p)*6)">· Day ${saveMeta.day} · ${esc(saveMeta.name)}</span></button>` : ''}
       <button class="btn" data-a="new">New Garden</button>
+      ${leaderboard.enabled ? '<button class="btn" data-a="lb">Leaderboard</button>' : ''}
       <button class="btn" data-a="import">Import Save</button>
       <button class="btn" data-a="settings">Settings</button>
       <button class="btn" data-a="help">How to Play</button>
+      <button class="btn" data-a="news">What's New in v${CHANGELOG[0].version}</button>
+      <div class="newspanel panel">${this.changelogHTML(1)}</div>
       <div class="foot">v${VERSION} · click anywhere to wake the birds</div>`;
     t.querySelectorAll('[data-a]').forEach((b) => b.addEventListener('click', () => {
       audio.init();
@@ -824,9 +992,31 @@ export class UI {
         else this.openCreator();
       }
       if (a === 'import') this.app.importSave();
+      if (a === 'lb') this.openLeaderboard();
       if (a === 'settings') this.openSettings();
       if (a === 'help') this.openHelp();
+      if (a === 'news') this.openChangelog();
     }));
+  }
+
+  changelogHTML(count = CHANGELOG.length) {
+    const list = (items, cls) => items.map((x) => `<li class="${cls}">${esc(x)}</li>`).join('');
+    return CHANGELOG.slice(0, count).map((v, i) => `
+      <div class="cl-ver">
+        <div class="cl-head"><span class="cl-v">v${esc(v.version)}</span><span class="cl-t">${esc(v.title)}</span>${i === 0 ? '<span class="tag new">latest</span>' : ''}</div>
+        ${v.added.length ? `<div class="cl-sub">Added</div><ul>${list(v.added, 'add')}</ul>` : ''}
+        ${v.fixed.length ? `<div class="cl-sub">Fixed</div><ul>${list(v.fixed, 'fix')}</ul>` : ''}
+      </div>`).join('');
+  }
+
+  openChangelog(back) {
+    const el = h(`<div class="modal panel" style="width:min(calc(var(--p)*210), 94vw)">
+      <button class="btn close">✕</button>
+      <h2>Update Log</h2>
+      <div class="scroll changelog" style="max-height:70vh">${this.changelogHTML()}</div>
+    </div>`);
+    this.openModal('news', el);
+    this.onModalClosed = (name) => { this.onModalClosed = null; if (name === 'news' && back) back(); };
   }
 
   hideTitle() {

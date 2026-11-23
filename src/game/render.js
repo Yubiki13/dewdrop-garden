@@ -1,9 +1,9 @@
 // Draws the world onto a low-res canvas (scaled up crisp by CSS) plus a full-res overlay for
 // text, tooltips and the pixel cursor. Also owns the free-moving camera.
-import { TILE, MAP_W, MAP_H, G_SOIL, G_WATER, ZOOM_LEVELS, DEFAULT_ZOOM } from '../config.js';
+import { TILE, MAP_W, MAP_H, ORIG_H, G_SOIL, G_WATER, ZOOM_LEVELS, DEFAULT_ZOOM } from '../config.js';
 import { ART } from '../art/index.js';
 import { drawSprite } from '../art/palette.js';
-import { stageOf } from '../data/crops.js';
+import { stageOf, CROPS } from '../data/crops.js';
 import { ITEMS } from '../data/items.js';
 import { LAYOUT } from './world.js';
 import { SPRINKLER_RANGE, HAND } from './game.js';
@@ -54,6 +54,7 @@ export class Renderer {
     this.light = makeCanvas(1, 1);
     this.lctx = this.light.getContext('2d');
     this.cam = { x: 0, y: 0, vx: 0, vy: 0 };
+    this.rows = ORIG_H + 4; // how much of the map the camera may show (grows when the meadow is bought)
     this.zoom = DEFAULT_ZOOM;
     this.uiScale = 3;
     this.rain = [];
@@ -67,7 +68,7 @@ export class Renderer {
     const dpr = window.devicePixelRatio || 1;
     const centre = this.vw ? { x: this.cam.x + this.vw / 2, y: this.cam.y + this.vh / 2 } : null;
     const physH = innerHeight * dpr, physW = innerWidth * dpr;
-    this.scale = Math.max(1, Math.round(physH / ZOOM_LEVELS[this.zoom]));
+    this.scale = this.scaleFor(this.zoom);
     this.vw = Math.ceil(physW / this.scale);
     this.vh = Math.ceil(physH / this.scale);
     this.canvas.width = this.vw;
@@ -95,7 +96,7 @@ export class Renderer {
     return { x: ((wx - this.cam.x) * this.scale) / this.dpr, y: ((wy - this.cam.y) * this.scale) / this.dpr };
   }
   clampCam() {
-    const W = MAP_W * TILE, H = MAP_H * TILE;
+    const W = MAP_W * TILE, H = this.rows * TILE;
     this.cam.x = this.vw >= W ? (W - this.vw) / 2 : clamp(this.cam.x, 0, W - this.vw);
     this.cam.y = this.vh >= H ? (H - this.vh) / 2 : clamp(this.cam.y, 0, H - this.vh);
   }
@@ -106,14 +107,27 @@ export class Renderer {
     this.clampCam();
     this.snap();
   }
-  panWorld(dx, dy) { this.cam.x += dx; this.cam.y += dy; this.cam.vx = this.cam.vy = 0; this.clampCam(); this.snap(); }
+  panWorld(dx, dy) { this.flight = null; this.cam.x += dx; this.cam.y += dy; this.cam.vx = this.cam.vy = 0; this.clampCam(); this.snap(); }
   panScreen(dsx, dsy) { this.panWorld((dsx * this.dpr) / this.scale, (dsy * this.dpr) / this.scale); }
   fling(vsx, vsy) {
     this.cam.vx = clamp((vsx * this.dpr) / this.scale, -900, 900);
     this.cam.vy = clamp((vsy * this.dpr) / this.scale, -900, 900);
   }
+  scaleFor(z) {
+    return Math.max(1, Math.round((innerHeight * (window.devicePixelRatio || 1)) / ZOOM_LEVELS[z]));
+  }
+
   zoomBy(steps, sx, sy) {
-    const z = clamp(this.zoom + steps, 0, ZOOM_LEVELS.length - 1);
+    // step through the levels, skipping ones that round to the same pixel scale on this screen
+    const dir = Math.sign(steps);
+    let z = this.zoom;
+    for (let k = 0; k < Math.abs(steps); k++) {
+      const s0 = this.scaleFor(z);
+      let nz = z + dir;
+      while (nz >= 0 && nz < ZOOM_LEVELS.length && this.scaleFor(nz) === s0) nz += dir;
+      if (nz < 0 || nz >= ZOOM_LEVELS.length) break;
+      z = nz;
+    }
     if (z === this.zoom) return;
     const before = this.toWorld(sx, sy);
     this.zoom = z;
@@ -122,11 +136,23 @@ export class Renderer {
     this.cam.y = before.y - (sy * this.dpr) / this.scale;
     this.clampCam();
     this.snap();
+    this.onZoom?.(this.zoom);
   }
   setZoom(z) { if (z !== this.zoom) { this.zoom = clamp(z, 0, ZOOM_LEVELS.length - 1); this.resize(); } }
   snap() { this.cx = Math.round(this.cam.x); this.cy = Math.round(this.cam.y); }
 
+  /** Smoothly glide the camera to a world point. */
+  flyTo(wx, wy) { this.flight = { x: wx - this.vw / 2, y: wy - this.vh / 2 }; this.cam.vx = this.cam.vy = 0; }
+
   updateCamera(dt) {
+    if (this.flight) {
+      const k = 1 - Math.exp(-dt * 3.2);
+      this.cam.x += (this.flight.x - this.cam.x) * k;
+      this.cam.y += (this.flight.y - this.cam.y) * k;
+      const bx = this.cam.x, by = this.cam.y;
+      this.clampCam();
+      if (Math.hypot(this.flight.x - this.cam.x, this.flight.y - this.cam.y) < 1 || bx !== this.cam.x && by !== this.cam.y) this.flight = null;
+    }
     if (this.cam.vx || this.cam.vy) {
       this.cam.x += this.cam.vx * dt;
       this.cam.y += this.cam.vy * dt;
@@ -163,6 +189,8 @@ export class Renderer {
     const w = game.world;
     const settings = opts.settings || {};
     this.game = game;
+    const rows = game.meadowOwned ? MAP_H : ORIG_H + 4; // peek a little past the gate into the fog
+    if (rows !== this.rows) { this.rows = rows; this.clampCam(); this.snap(); }
     this.wind = Math.sin(t * 0.7) * 0.6 + Math.sin(t * 1.9) * 0.25 + game.weather.intensity * 0.6;
     const ht = game.hoverInfo && game.hoverInfo.target;
     this.hl = ht ? (ht.kind === 'obj' || ht.kind === 'crop' || ht.kind === 'weed' ? 'i' + ht.i : ht.kind === 'struct' ? 's' + ht.s.type : ht.kind) : null;
@@ -203,6 +231,7 @@ export class Renderer {
     for (const d of list) d.f();
 
     game.particles.draw(ctx, cx, cy);
+    if (!game.meadowOwned) this.drawLockedFog(game);
     if (game.carry) this.drawCarried(game);
     this.drawButterflies(game);
     this.drawRain(game, dt);
@@ -220,6 +249,18 @@ export class Renderer {
       if (!opts.modalOpen) this.drawTooltip(game);
       this.drawCursor(game, opts);
     }
+  }
+
+  drawLockedFog(game) {
+    const y = ORIG_H * TILE - this.cy;
+    if (y > this.vh) return;
+    const ctx = this.ctx;
+    const g = ctx.createLinearGradient(0, y - 6, 0, y + 40);
+    g.addColorStop(0, 'rgba(220,232,224,0)');
+    g.addColorStop(0.3, 'rgba(220,232,224,0.75)');
+    g.addColorStop(1, 'rgba(205,220,212,0.95)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, y - 6, this.vw, this.vh - y + 6);
   }
 
   shakeOf(key) {
@@ -256,11 +297,37 @@ export class Renderer {
         }
       }
     ctx.globalAlpha = 1;
+    this.drawFish(game);
     for (const p of w.props) {
       if (p.type !== 'lily' || p.tx < tx0 || p.tx > tx1 || p.ty < ty0 || p.ty > ty1) continue;
       const bob = Math.round(Math.sin(t * 1.2 + p.tx * 1.3 + p.ty) * 0.6);
       drawSprite(ctx, ART.lily[p.v], p.tx * TILE + 4 + p.ox - this.cx, p.ty * TILE + 5 + (p.oy || 0) + bob - this.cy);
     }
+  }
+
+  drawFish(game) {
+    const ctx = this.ctx;
+    for (const f of game.critters.fish) {
+      if (f.hidden > 0) continue;
+      const x = Math.round(f.x - this.cx), y = Math.round(f.y - this.cy);
+      if (x < -10 || y < -10 || x > this.vw + 10 || y > this.vh + 10) continue;
+      const spr = ART.fish[f.v];
+      const a = Math.round(f.a / (Math.PI / 8)) * (Math.PI / 8);
+      const left = Math.cos(a) < 0;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(left ? a - Math.PI : a);
+      if (left) ctx.scale(-1, 1);
+      const wig = Math.sin(f.t * (f.flee ? 30 : 9)) > 0 ? 1 : 0;
+      // a soft shadow below, then the fish slightly faded as if under the surface
+      ctx.globalAlpha = 0.25;
+      ctx.drawImage(silhouette(spr, '#10304a'), -Math.round(spr.w / 2) + 1, -Math.round(spr.h / 2) + 2);
+      ctx.globalAlpha = 0.78;
+      ctx.drawImage(spr.img, 0, 0, spr.w, spr.h, -Math.round(spr.w / 2) + wig * 0, -Math.round(spr.h / 2), spr.w, spr.h);
+      if (wig) { ctx.globalAlpha = 0.6; ctx.drawImage(spr.img, 0, 0, 2, spr.h, -Math.round(spr.w / 2), -Math.round(spr.h / 2) + (Math.sin(f.t * 9) > 0.5 ? 1 : 0), 2, spr.h); }
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
   }
 
   drawGroundDetails(game, tx0, ty0, tx1, ty1) {
@@ -532,6 +599,7 @@ export class Renderer {
         break;
       }
       case 'well': put(ART.well, bx - 1, by - 45); break;
+      case 'gate': put(game.meadowOwned ? ART.gate.open : ART.gate.closed, bx - 1, by - 32); break;
       case 'bin': put(ART.bin, bx, by - 23); break;
       case 'sign': put(ART.sign, bx, by - 20); break;
     }
@@ -654,6 +722,16 @@ export class Renderer {
       if (s.type === 'stall') out.push({ x: (s.tx + 1.5) * TILE, y: s.ty * TILE - 4, r: 40, i: 0.7, flicker: true });
     }
     for (const [i, o] of w.objs) if (o.type === 'lamp') out.push({ x: (i % MAP_W) * TILE + 8, y: ((i / MAP_W) | 0) * TILE - 8, r: 64, flicker: true });
+    // magical crops glow softly at night
+    let glows = 0;
+    for (const [i, c] of w.crops) {
+      const glow = CROPS[c.id].glow;
+      if (!glow || glows > 60 || !this.isVisibleTile(i)) continue;
+      const st = stageOf(c);
+      if (st < 3) continue;
+      glows++;
+      out.push({ x: (i % MAP_W) * TILE + 8, y: ((i / MAP_W) | 0) * TILE + (ART.crops[c.id].tall ? 0 : 6), r: st === 4 ? 26 : 14, i: st === 4 ? 0.7 : 0.35, c: glow, flicker: true });
+    }
     // your hand carries a little glow at night so you can always see what you're doing
     if (game.hover && !opts.title) out.push({ x: game.hover.wx, y: game.hover.wy, r: 46, i: 0.5, c: [255, 220, 170] });
     for (const f of game.critters.fireflies) out.push({ x: f.x, y: f.y, r: 9, i: 0.5 * (0.5 + 0.5 * Math.sin(f.t * 3)), c: [200, 255, 120] });

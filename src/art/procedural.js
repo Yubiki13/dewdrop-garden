@@ -467,3 +467,39 @@ export function makeCrate(gift) {
   plank.rect(0, 0, 6, 1, L); plank.rect(0, 1, 6, 1, D);
   return { body: body.finish(true, 0.55), lid: lid.finish(true, 0.55), plank: plank.finish(false) };
 }
+
+/* ---------------------------- Meadow gate ---------------------------- */
+
+export function makeGate(open) {
+  const W = 34, H = 34;
+  const p = new Painter(W, H);
+  const post = (x0) => {
+    for (let y = 4; y < 33; y++) for (let x = x0; x < x0 + 5; x++) p.set(x, y, x === x0 ? '#c8945a' : x === x0 + 4 ? '#5a3420' : '#8a5a34');
+    p.rect(x0 - 1, 2, 7, 3, '#6a4024'); p.hline(x0 - 1, x0 + 5, 2, '#b07a4a');
+  };
+  post(0); post(29);
+  // arch beam
+  p.rect(2, 6, 30, 3, '#7a4a30'); p.hline(2, 31, 6, '#b07a4a'); p.hline(2, 31, 8, '#4a2e22');
+  // vines on the beam
+  for (let x = 3; x < 31; x += 3) { p.set(x, 9, '#4fa64a'); p.set(x + 1, 10, '#2f7a3e'); if (x % 2) p.set(x, 5, '#f08ac0'); }
+  if (!open) {
+    for (let y = 11; y < 33; y++)
+      for (let x = 5; x < 29; x++) {
+        const plank = (x - 5) % 4 === 3;
+        let c = plank ? '#6a4024' : y % 8 === 0 ? '#8a5a34' : '#b07a4a';
+        if (x === 16 || x === 17) c = '#5a3420';
+        p.set(x, y, c);
+      }
+    // cross braces
+    for (let i = 0; i < 10; i++) { p.set(6 + i, 30 - i * 2, '#d8a868'); p.set(18 + i, 12 + i * 2, '#d8a868'); }
+    // FOR SALE board with a coin
+    p.rect(9, 15, 16, 10, '#3b2416'); p.rect(10, 16, 14, 8, '#f2e2bc');
+    p.rect(12, 18, 4, 4, '#c98f22'); p.rect(13, 19, 2, 2, '#f5d44a');
+    p.hline(17, 22, 18, '#9e2a3a'); p.hline(17, 21, 20, '#9e2a3a'); p.hline(17, 22, 22, '#9e2a3a');
+  } else {
+    // doors swung open
+    for (let y = 12; y < 33; y++) { p.rect(5, y, 3, 1, (y % 6) ? '#b07a4a' : '#6a4024'); p.rect(26, y, 3, 1, (y % 6) ? '#b07a4a' : '#6a4024'); }
+    p.vline(7, 12, 32, '#6a4024'); p.vline(26, 12, 32, '#6a4024');
+  }
+  return p.finish(true, 0.55);
+}

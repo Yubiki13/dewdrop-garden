@@ -2,6 +2,7 @@
 // Sprites are auto-outlined when built, so art here is just fills + shading.
 import { sprite, Painter, PAL } from './palette.js';
 import { hexToRgb } from '../core/util.js';
+import { RARE_CROP_ART } from './crops2.js';
 
 const E16 = '................';
 const blank = (n) => Array(n).fill(E16);
@@ -367,17 +368,20 @@ const CROP_ART = {
 };
 
 export function buildCropSprites(cropId) {
-  const art = CROP_ART[cropId];
+  const art = CROP_ART[cropId] || RARE_CROP_ART[cropId];
   const tall = !!art.tall;
+  const o = art.overrides ? { overrides: art.overrides } : {};
   const up = (rows) => (tall ? [...blank(8), ...rows.slice(0, 16)] : rows);
   const stages = [
-    sprite(tall ? up(SEED) : SEED),
-    sprite(tall ? up(SPROUT) : SPROUT),
-    sprite(art.young),
-    sprite(art.grown),
-    sprite(art.ripe),
+    sprite(tall ? up(SEED) : SEED, o),
+    sprite(tall ? up(SPROUT) : SPROUT, o),
+    sprite(art.young, o),
+    sprite(art.grown, o),
+    sprite(art.ripe, o),
   ];
-  return { stages, icon: sprite(art.icon), tall };
+  const iconRows = art.iconFrom ? CROP_ART[art.iconFrom].icon : art.icon;
+  const icon = sprite(iconRows, art.iconOverrides ? { overrides: art.iconOverrides } : {});
+  return { stages, icon, tall };
 }
 
 /* ------------------------------------------------------------------ */
@@ -598,4 +602,23 @@ export function buildCursorSprites() {
     basket: sprite(BASKET),
     weeds: WEEDS.map((w) => sprite(w, { outlineStrength: 0.5 })),
   };
+}
+
+/* ------------------------------------------------------------------ */
+/* Pond fish (facing right)                                            */
+/* ------------------------------------------------------------------ */
+
+const FISH = ['A..AAA..', 'AAAAXAkA', 'A..AAA..'];
+const FISH_SMALL = ['A.AA..', 'AAAXk.', 'A.AA..'];
+export function buildFish() {
+  const kinds = [
+    { A: '#f08a2c', X: '#ffffff' }, // koi
+    { A: '#f5f1e7', X: '#e04a4a' }, // white koi with a red spot
+    { A: '#f5c030', X: '#fff3a0' }, // goldfish
+    { A: '#6a8ab0', X: '#a8c8e8' }, // carp
+  ];
+  return [
+    ...kinds.map((o) => sprite(FISH, { overrides: o, outlineStrength: 0.5 })),
+    sprite(FISH_SMALL, { overrides: { A: '#8ac4f0', X: '#d4efff' }, outlineStrength: 0.5 }),
+  ];
 }

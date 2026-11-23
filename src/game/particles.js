@@ -66,6 +66,7 @@ export class Particles {
         if (p.z < 0) { p.z = 0; p.vz *= -0.3; p.vx *= 0.5; p.vy *= 0.5; }
       }
     }
+    for (const p of this.list) if (p.life <= 0 && p.onEnd) { const f = p.onEnd; p.onEnd = null; f(p); }
     this.list = this.list.filter((p) => p.life > 0);
     for (const t of this.texts) { t.life -= dt; t.y -= 14 * dt * (t.life / t.max + 0.2); }
     this.texts = this.texts.filter((t) => t.life > 0);
@@ -109,6 +110,16 @@ export class Particles {
           ctx.globalAlpha = 1;
           drawSprite(ctx, p.spr, x - 8, y - 8);
           break;
+        case 'fish': {
+          ctx.globalAlpha = 1;
+          ctx.save();
+          ctx.translate(x, y);
+          if (p.flip) ctx.scale(-1, 1);
+          ctx.rotate(-Math.atan2(p.vz, 30) * 0.8);
+          ctx.drawImage(p.spr.img, -Math.round(p.spr.w / 2), -Math.round(p.spr.h / 2));
+          ctx.restore();
+          break;
+        }
         default:
           ctx.fillStyle = p.color; ctx.fillRect(x, y, p.size, p.size);
       }

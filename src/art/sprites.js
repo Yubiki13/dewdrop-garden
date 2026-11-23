@@ -2,7 +2,7 @@
 // Sprites are auto-outlined when built, so art here is just fills + shading.
 import { sprite, Painter, PAL } from './palette.js';
 import { hexToRgb } from '../core/util.js';
-import { RARE_CROP_ART } from './crops2.js';
+import { RARE_CROP_ART, MORE_CROP_ART } from './crops2.js';
 
 const E16 = '................';
 const blank = (n) => Array(n).fill(E16);
@@ -368,7 +368,7 @@ const CROP_ART = {
 };
 
 export function buildCropSprites(cropId) {
-  const art = CROP_ART[cropId] || RARE_CROP_ART[cropId];
+  const art = CROP_ART[cropId] || RARE_CROP_ART[cropId] || MORE_CROP_ART[cropId];
   const tall = !!art.tall;
   const o = art.overrides ? { overrides: art.overrides } : {};
   const up = (rows) => (tall ? [...blank(8), ...rows.slice(0, 16)] : rows);
@@ -479,6 +479,7 @@ export const SPRINKLER_TIERS = [
   { A: PAL.O, a: PAL.o, C: PAL.P, X: PAL.G },
   { A: PAL.S, a: PAL.s, C: PAL.W, X: PAL.c },
   { A: PAL.Y, a: PAL.y, C: PAL.Z, X: PAL.R },
+  { A: '#f08ac0', a: '#7a52c0', C: '#fff3a0', X: '#3ac0b0' }, // rainbow
 ];
 
 const LAMP = [
@@ -620,5 +621,6 @@ export function buildFish() {
   return [
     ...kinds.map((o) => sprite(FISH, { overrides: o, outlineStrength: 0.5 })),
     sprite(FISH_SMALL, { overrides: { A: '#8ac4f0', X: '#d4efff' }, outlineStrength: 0.5 }),
+    sprite(FISH, { overrides: { A: '#ffd030', X: '#ffffff' }, outlineStrength: 0.5 }), // golden koi
   ];
 }

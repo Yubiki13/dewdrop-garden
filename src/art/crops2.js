@@ -195,3 +195,139 @@ for (const [id, s] of Object.entries(SPECS)) {
     iconOverrides: { ...(s.leaf || {}), ...s.c, ...(s.iconC || {}) },
   };
 }
+
+/* ================================================================== */
+/* v1.2: families for the 125 expansion crops                          */
+/* ================================================================== */
+import { MORE_CROPS, LEAVES } from '../data/crops_more.js';
+
+Object.assign(ARCH, {
+  herb: {
+    young: pad16(['......h.h.......', '.....hGhGh......', '......gGg.......', '.......g........']),
+    grown: pad16(['....h..hh..h....', '...hGhhGGhhGh...', '...GGgGGGgGGG...', '....gGgGgGgg....', '.....gggggg.....', '.......gg.......']),
+    anchors: [[4, 7], [7, 6], [11, 7], [9, 8], [5, 9]],
+  },
+  palm: {
+    tall: true,
+    young: pad24(['.......h........', '......hG.h......', '.......GhG......', '.......gg.......', '.......nn.......']),
+    grown: pad24([
+      '..hh.......hh...', '.hGGh.....hGGh..', 'hGGgGh...hGgGGh.', '.ggGGGh.hGGGgg..', '....gGGhGGg.....', '......gGGg......',
+      '.......nN.......', '.......nN.......', '.......nN.......', '.......nN.......', '.......nN.......', '......nnNN......',
+      '......bnNb......', '.....bbbbbb.....',
+    ]),
+    anchors: [[3, 13], [9, 13]],
+  },
+  shroom: {
+    young: pad16(['.......LA.......', '......AAAa......', '.......ww.......', '......bwwb......']),
+    grown: pad16(['......LAAa......', '.....LAAAAa.....', '.....aAAAaa.....', '.......ww.......', '.......ww.......', '......bwwb......']),
+    ripe: pad16([
+      '.....LLAAAa.....', '....LAXAAAXa....', '...LAAAAXAAaa...', '...AAXAAAAAXa...', '....aaaaaaaa....',
+      '.......ww...La..', '.......ww..AAa..', '.......ww...w...', '......bwwb.bwb..',
+    ]),
+    anchors: [],
+  },
+});
+
+Object.assign(F, {
+  dot: ['X'],
+  sprig: ['LXL', '.L.'],
+  taproot: ['LAa', 'AAa', '.Aa', '.A.', '.a.'],
+  tuber: ['.LA..LA', 'LAAa.Aa', '.aa..a.'],
+  head: ['.LAAa.', 'LAaLAa', 'AaLAaA', 'aAAaAa', '.aaaa.'],
+  floret: ['.aAAa.', 'aAaAAa', 'AaAAaA', '.aaaa.'],
+  long: ['.LAAAAa.', 'LAXAXAXa', '.aaaaaa.'],
+  pod: ['g.', 'LA', 'AX', 'LA', 'Aa'],
+  bunch: ['..gg.', '.LAg.', 'LAAa.', 'AAa.L', '.a.Aa'],
+  cacao: ['LA.', 'AXa', 'AXa', '.a.'],
+  // flower blooms (10x8): A petals, a shade, L highlight, X centre
+  tulip: ['..A.LA.A..', '..AALAAA..', '..AAAAAa..', '..aAAAaa..', '...aAAa...', '....gg....', '....gG....', '....gg....'],
+  daisy: ['....AA....', '.A..AA..A.', '..AAXXAA..', 'AAAXXXXAAA', '..AAXXAA..', '.A..AA..A.', '....AA....', '....gg....'],
+  poppy: ['..AAA.AA..', '.LAAAAAAA.', '.AAAkkAAa.', '.AAkkkkAa.', '..AAkkAAa.', '...aAAaa..', '....gg....', '....gg....'],
+  bell: ['....g.....', '...g.g....', '..g...g...', '.LA...LA..', '.AAa..AAa.', '.a.a..a.a.', '....g.....', '....gg....'],
+  lotus: ['....LA....', '..A.LA.A..', '.LA.AA.AA.', '.AALAAAAa.', 'AAAAXXAAaa', '.aAAAAAaa.', '..aaaaaa..', '....gg....'],
+  puff: ['...LAAL...', '..LAaALA..', '.AALAAaAA.', '.AaAALAAa.', '.AAaAAaAa.', '..aAAaAa..', '...aaaa...', '....gg....'],
+  spike: ['....L.....', '...LA.....', '....AL....', '...LAa....', '....AL....', '...aAa....', '....AL....', '....gg....'],
+});
+
+Object.assign(ICON, {
+  leaf: [E, '.........h......', '........hGg.....', '....hh..hGg.....', '...hGGh.GGg.....', '...GGGGhGg......', '....gGGGGg.hh...',
+    '.....gGGGghGGh..', '......gGGGGGg...', '.......gGggg....', '........g.......', '........g.......', E, E, E, E],
+  pod: [E, '..........gg....', '.........gG.....', '........LAa.....', '.......LAAa.....', '......LAXAa.....', '.....LAAAa......',
+    '....LAXAa.......', '...LAAAa........', '..LAXAa.........', '..AAAa..........', '..aa............', E, E, E, E],
+  banana: [E, '......gg........', '......gg........', '.....LAg........', '....LAAa.LA.....', '...LAAa.LAAa....', '..LAAa.LAAa.LA..',
+    '..AAa..AAa.LAAa.', '..Aa..LAa..AAa..', '..a...Aa...Aa...', '......a....a....', E, E, E, E, E],
+  long: [E, '........hG......', '.......hGg......', '......LAAa......', '.....LAXAa......', '....LAAXAa......', '....AXAAa.......',
+    '...LAAXAa.......', '...AXAAa........', '..LAAXa.........', '..AAAa..........', '...aa...........', E, E, E, E],
+  mushroom: [E, E, '.....LLAAAa.....', '....LAXAAAXa....', '...LAAAAXAAaa...', '...AAXAAAAAXa...', '...aaaaaaaaaa...',
+    '......wwwS......', '......wwwS......', '......wwwS......', '.....wwwwSS.....', E, E, E, E, E],
+  taproot: [E, '.......h.h......', '......hGhGh.....', '.......GgG......', '......LAAa......', '......LAAa......', '......AAAa......',
+    '.......AAa......', '.......AAa......', '.......Aa.......', '.......Aa.......', '.......a........', '.......a........', E, E, E],
+  head: [E, E, '.....hhhhhh.....', '...hhLLAALLhh...', '..hGLAAaLAALGh..', '..GGLAaLAaALGG..', '.hGGAaLAAaAAGGh.', '.GGgAAaAAaAAgGG.',
+    '.GgGGaAAAAaGGgG.', '..gGGgaaaagGGg..', '...ggGGggGGgg...', '.....gggggg.....', E, E, E, E],
+});
+
+ICON.herbleaf = stampAll(ICON.leaf, ['X'], [[9, 1], [4, 3], [12, 6], [3, 5], [7, 7]]);
+
+// family -> how to build it
+const FAMILIES = {
+  herb: { arch: 'herb', fruit: 'dot', n: 5, icon: 'herbleaf' },
+  leafy: { arch: 'rosette', fruit: 'sprig', at: [[3, 7], [7, 6], [11, 7], [6, 9]], icon: 'leaf', iconLeafFromA: true },
+  tea: { arch: 'bush', fruit: 'sprig', n: 4, icon: 'leaf', iconLeafFromA: true },
+  bulb: { arch: 'root', fruit: 'bulb', icon: 'beet' },
+  taproot: { arch: 'root', fruit: 'taproot', at: [[6, 9]], icon: 'taproot' },
+  tuber: { arch: 'root', fruit: 'tuber', at: [[4, 10]], icon: 'orb' },
+  head: { arch: 'rosette', fruit: 'head', at: [[5, 6]], icon: 'head' },
+  floret: { arch: 'rosette', fruit: 'floret', at: [[5, 6]], icon: 'head' },
+  spiky: { arch: 'rosette', fruit: 'pineapple', at: [[5, 1]], icon: 'pineapple' },
+  pumpkin: { arch: 'vine', fruit: 'pumpkin', icon: 'melon' },
+  gourd: { arch: 'vine', fruit: 'melon', icon: 'melon' },
+  long: { arch: 'vine', fruit: 'long', at: [[4, 10], [8, 8]], icon: 'long' },
+  palm: { arch: 'palm', fruit: 'bunch', icon: 'banana' },
+  berry: { arch: 'bush', fruit: 'berry', n: 5, icon: 'cranberry' },
+  orb: { arch: 'bush', fruit: 'orb', n: 3, icon: 'orb' },
+  chili: { arch: 'bush', fruit: 'chili', n: 5, icon: 'chili' },
+  pepper: { arch: 'bush', fruit: 'pepper', n: 3, icon: 'pepper' },
+  pod: { arch: 'trellis', fruit: 'pod', icon: 'pod' },
+  grape: { arch: 'trellis', fruit: 'grapes', icon: 'grapes' },
+  cactus: { arch: 'cactus', fruit: 'dragon', icon: 'dragon' },
+  cacao: { arch: 'bush', fruit: 'cacao', n: 3, icon: 'coffee' },
+  crystal: { arch: 'bush', fruit: 'crystal', n: 4, icon: 'crystal' },
+  star: { arch: 'bush', fruit: 'star', n: 3, icon: 'star' },
+  mushroom: { arch: 'shroom', icon: 'mushroom' },
+  tulip: { arch: 'flower', bloom: 'tulip' }, daisy: { arch: 'flower', bloom: 'daisy' }, poppy: { arch: 'flower', bloom: 'poppy' },
+  bell: { arch: 'flower', bloom: 'bell' }, lotus: { arch: 'flower', bloom: 'lotus' }, puff: { arch: 'flower', bloom: 'puff' },
+  spike: { arch: 'flower', bloom: 'spike' },
+};
+
+export const MORE_CROP_ART = {};
+for (const [id, , , fam, A, a, L, X, leafKey] of MORE_CROPS) {
+  const f = FAMILIES[fam];
+  const Ar = ARCH[f.arch];
+  const leaf = leafKey ? LEAVES[leafKey] : {};
+  const c = { A, a, L, X: X || L, w: '#f6f1e7', S: '#cbc7d4' };
+  if (fam === 'mushroom') { c.w = '#f2e8d8'; c.S = '#c8b8a0'; }
+  let ripe;
+  let icon;
+  if (f.bloom) {
+    ripe = stamp(Ar.grown, F[f.bloom], ...Ar.anchors[0]);
+    icon = flowerIcon(F[f.bloom]);
+  } else if (Ar.ripe) {
+    ripe = Ar.ripe;
+    icon = ICON[f.icon];
+  } else {
+    const anchors = f.at || (f.n ? Ar.anchors.slice(0, f.n) : Ar.anchors);
+    ripe = stampAll(Ar.grown, F[f.fruit], anchors);
+    icon = ICON[f.icon];
+  }
+  // herb / leafy icons are drawn in the crop's own colours
+  const iconLeaf = f.iconLeafFromA ? { G: A, g: a, h: L } : {};
+  MORE_CROP_ART[id] = {
+    tall: !!Ar.tall,
+    young: Ar.young,
+    grown: Ar.grown,
+    ripe,
+    icon,
+    overrides: { ...leaf, ...c },
+    iconOverrides: { ...leaf, ...c, ...iconLeaf },
+  };
+}

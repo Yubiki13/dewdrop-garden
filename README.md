@@ -24,12 +24,13 @@ No goals, no timers, no pressure.
   when you poke them, the pond ripples, butterflies flee your hand, weeds sometimes hide seeds in their roots,
   and at night your hand carries a soft glow.
 
-- **31 crops** — 11 everyday crops plus **20 rare seeds**: beetroot and pineapple, grapes and coffee,
-  dragon fruit and starfruit, all the way up to the glowing Moonflower, Golden Pumpkin, Fire Lily, Frost Melon
-  and the legendary **Dewdrop Lily**, the best seed in the game. Magical crops glow at night.
+- **156 crops** — everyday veggies, berries, citrus, tropical fruit, herbs, mushrooms, a dozen kinds of flower
+  and a whole set of glowing magical crops, all the way up to the **Celestial Lotus**, the best seed in the game.
+- **Achievements** — 58 of them from easy to legendary, including turning the *entire* map into one giant garden.
+- **Three plots of land** — the original garden, the Riverside Meadow (50,000 coins) and Blossom Hills (500,000 coins)
+  with its golden koi, windmill and Wishing Well.
+- **Fishing, fruit trees, beehives, golden tools**, a daily mailbox, campfires, lanterns and Mochi the cat.
 - **Buy in bulk** — type exactly how many seeds you want (or hit Max) in Basil's shop.
-- **The Riverside Meadow** — save up 50,000 coins to open the gate to a whole second garden plot with
-  its own lake, stream and Shipping Bin.
 - **Fish** swim in the pond and the meadow lake (and sometimes jump).
 - **Real watering** — crops only grow while their soil is wet. Wet soil turns dark and dries out after about a day.
 - **Tools** — hoe, watering can, water bucket (soaks 3×3), shovel and sickle (harvests 3×3).
@@ -101,7 +102,11 @@ src/art/palette.js           palette + string-art → sprite builder (auto-outli
 src/art/sprites.js           hand-made pixel art: characters, crops, items
 src/art/procedural.js        painted art: trees, cottage, market stall, well, decor
 src/data/crops.js            crop stats (growth hours, prices, regrowth)
-src/art/crops2.js            art for the 20 rare crops (plant archetypes + fruit sprites)
+src/art/crops2.js            art for the expansion crops (plant families + fruit/bloom sprites)
+src/data/crops_more.js       the 125 v1.2 crops (one row each; stats are derived from their order)
+src/game/expansion.js        v1.2 gameplay: Blossom Hills, fishing, beehives, fruit trees, mail, wishing well, Mochi
+src/game/achievements.js     achievement list + tracker
+src/data/changelog.js        the update log shown on the title screen
 src/game/leaderboard.js      optional global leaderboard, off by default (see docs/LEADERBOARD_SETUP.md)
 src/data/items.js            every item + the shop lists
 src/game/world.js            map layout & generation, save format for tiles

@@ -1,3 +1,17 @@
+import { MORE_CROPS, REGROW } from './crops_more.js';
+
+const BLURB = {
+  herb: 'A fragrant herb. Keeps regrowing.', bulb: 'A plump bulb hiding under the soil.', leafy: 'Fresh, leafy greens.',
+  pod: 'Climbs its trellis and keeps making pods.', taproot: 'A long root vegetable.', head: 'Grows into a tight, crunchy head.',
+  daisy: 'A cheerful little flower.', long: 'Grows long on a sprawling vine.', berry: 'A bush that keeps fruiting.',
+  tulip: 'An elegant cup-shaped bloom.', tuber: 'Starchy and satisfying.', chili: 'Hot! Keeps fruiting.', floret: 'A tidy cluster of florets.',
+  orb: 'A fruiting shrub that keeps on giving.', pumpkin: 'A sturdy winter squash.', poppy: 'Bright, papery petals.', pepper: 'Sweet and crisp.',
+  spike: 'A tall spike of tiny flowers.', grape: 'Climbs a trellis. Regrows.', gourd: 'A big, juicy melon.', bell: 'Nodding little bells.',
+  spiky: 'Spiky outside, sweet inside.', cactus: 'Fruit from a hardy cactus.', puff: 'A big round puff of petals.', tea: 'Pick the young leaves again and again.',
+  palm: 'Bunches of fruit on a little palm.', cacao: 'Pods full of chocolatey beans. Regrows.', lotus: 'Serene, layered petals.',
+  mushroom: 'A curious cap that pops up in the soil.', crystal: 'Sparkling gem-like berries.', star: 'Fruit shaped like falling stars.',
+};
+
 // Crop definitions. `hours` = in-game hours of WET soil needed to ripen.
 // `regrow` = hours to re-ripen after harvesting (plant stays). `yield` = items per harvest.
 export const CROPS = {
@@ -35,6 +49,44 @@ export const CROPS = {
   frostmelon:   { rare: true, name: 'Frost Melon',    hours: 64, seedPrice: 3600, sell: 12500, glow: [170, 230, 255], colors: ['#a8e8ff', '#5aa8d8', '#ffffff'], desc: 'Stays ice-cold even in summer.' },
   dewdroplily:  { rare: true, name: 'Dewdrop Lily',   hours: 72, seedPrice: 5000, sell: 20000, glow: [200, 240, 255], colors: ['#d4efff', '#4a7ad0', '#ffffff'], desc: 'The legendary flower this garden is named after. The best seed there is.' },
 };
+
+// categories for the shop filter (the expansion crops bring their own)
+const CATS = {
+  radish: 'veg', carrot: 'veg', lettuce: 'veg', potato: 'veg', strawberry: 'fruit', tomato: 'veg', corn: 'veg', blueberry: 'fruit',
+  sunflower: 'flower', pumpkin: 'veg', watermelon: 'fruit', beetroot: 'veg', cauliflower: 'veg', bellpepper: 'veg', eggplant: 'veg',
+  chili: 'veg', pineapple: 'fruit', grapes: 'fruit', cranberry: 'fruit', coffee: 'herb', cantaloupe: 'fruit', dragonfruit: 'fruit',
+  starfruit: 'fruit', rainbowrose: 'flower', moonflower: 'magic', goldpumpkin: 'magic', crystalberry: 'magic', ancientfruit: 'magic',
+  firelily: 'magic', frostmelon: 'magic', dewdroplily: 'magic',
+};
+for (const [id, c] of Object.entries(CROPS)) c.cat = CATS[id] || 'veg';
+
+// ---- v1.2: 125 more crops. Value climbs smoothly with position; the last one is the new best seed. ----
+const nice = (v) => {
+  const p = Math.pow(10, Math.max(0, Math.floor(Math.log10(v)) - 1));
+  return Math.max(1, Math.round(v / p) * p);
+};
+const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+MORE_CROPS.forEach(([id, name, cat, fam, A, a, L], r) => {
+  const perHour = 2.5 * Math.pow(1.054, r);
+  const hours = Math.round(8 + r * 0.5 + ((r * 7) % 5) - 2);
+  const single = name.replace(/erries$/, 'erry').replace(/ Beans$/, ' Bean').replace(/^Peas$/, 'Pea').replace(/Tomatoes$/, 'Tomato')
+    .replace(/Currants$/, 'Currant').replace(/Sprouts$/, 'Sprout').replace(/^Tea Leaves$/, 'Tea');
+  const def = { name, hours, cat, fam, big: true, colors: [A, a, L], seedName: single + ' Seeds' };
+  const rg = REGROW[fam];
+  if (rg) {
+    def.regrow = Math.max(4, Math.round(hours * rg[1]));
+    if (rg[0] > 1) def.yield = rg[0];
+    def.seedPrice = nice(perHour * hours * 0.5);
+    def.sell = nice((perHour * def.regrow) / rg[0]);
+  } else {
+    def.seedPrice = nice(perHour * hours * 0.3);
+    def.sell = nice(def.seedPrice + perHour * hours);
+  }
+  if (cat === 'magic') def.glow = hexRgb(L === '#ffffff' ? A : L);
+  def.desc = BLURB[fam] || 'A lovely new crop.';
+  if (id === 'celestiallotus') def.desc = 'A flower from the stars themselves. The best seed in the whole game.';
+  CROPS[id] = def;
+});
 
 export const CROP_IDS = Object.keys(CROPS);
 

@@ -1,12 +1,14 @@
 // Draws the world onto a low-res canvas (scaled up crisp by CSS) plus a full-res overlay for
 // text, tooltips and the pixel cursor. Also owns the free-moving camera.
-import { TILE, MAP_W, MAP_H, ORIG_H, G_SOIL, G_WATER, ZOOM_LEVELS, DEFAULT_ZOOM } from '../config.js';
+import { TILE, MAP_W, MAP_H, ORIG_H, MEADOW_END, G_SOIL, G_WATER, ZOOM_LEVELS, DEFAULT_ZOOM } from '../config.js';
 import { ART } from '../art/index.js';
 import { drawSprite } from '../art/palette.js';
 import { stageOf, CROPS } from '../data/crops.js';
 import { ITEMS } from '../data/items.js';
 import { LAYOUT } from './world.js';
 import { SPRINKLER_RANGE, HAND } from './game.js';
+import { TREE_KINDS } from '../art/expansion.js';
+import { TREES } from '../data/items.js';
 import { hash2, lerp, clamp, makeCanvas, rand } from '../core/util.js';
 
 const SKY = [
@@ -42,6 +44,7 @@ function silhouette(spr, color) {
 // cursor hotspots (where on the sprite the "click" happens) + resting tilt
 const TOOL_CURSOR = {
   hoe: { hx: 13, hy: 3, rot: 0 }, can: { hx: 14, hy: 4, rot: 0 }, bucket: { hx: 8, hy: 12, rot: 0 },
+  goldhoe: { hx: 13, hy: 3, rot: 0 }, goldcan: { hx: 14, hy: 4, rot: 0 }, net: { hx: 4, hy: 7, rot: 0 },
   shovel: { hx: 3, hy: 13, rot: 0 }, sickle: { hx: 4, hy: 4, rot: 0 },
 };
 
@@ -101,6 +104,7 @@ export class Renderer {
     this.cam.y = this.vh >= H ? (H - this.vh) / 2 : clamp(this.cam.y, 0, H - this.vh);
   }
   centerOn(wx, wy) {
+    this.flight = null;
     this.cam.x = wx - this.vw / 2;
     this.cam.y = wy - this.vh / 2;
     this.cam.vx = this.cam.vy = 0;
@@ -189,7 +193,8 @@ export class Renderer {
     const w = game.world;
     const settings = opts.settings || {};
     this.game = game;
-    const rows = game.meadowOwned ? MAP_H : ORIG_H + 4; // peek a little past the gate into the fog
+    const rows = !game.meadowOwned ? ORIG_H + 4 : !game.hillsOwned ? MEADOW_END + 4 : MAP_H; // peek a little past the next gate into the fog
+    game.fx.windmill = Math.max(0, (game.fx.windmill || 0) - dt);
     if (rows !== this.rows) { this.rows = rows; this.clampCam(); this.snap(); }
     this.wind = Math.sin(t * 0.7) * 0.6 + Math.sin(t * 1.9) * 0.25 + game.weather.intensity * 0.6;
     const ht = game.hoverInfo && game.hoverInfo.target;
@@ -227,11 +232,12 @@ export class Renderer {
     for (const s of w.structures) list.push({ y: (s.ty + s.h) * TILE - 1, f: () => this.drawStructure(game, s) });
     const g = LAYOUT.granny;
     list.push({ y: g.ty * TILE + 13, f: () => this.drawGranny(game) });
+    if (game.cat) list.push({ y: game.cat.y, f: () => this.drawCat(game) });
     list.sort((a, b) => a.y - b.y);
     for (const d of list) d.f();
 
     game.particles.draw(ctx, cx, cy);
-    if (!game.meadowOwned) this.drawLockedFog(game);
+    if (!game.meadowOwned || !game.hillsOwned) this.drawLockedFog(game);
     if (game.carry) this.drawCarried(game);
     this.drawButterflies(game);
     this.drawRain(game, dt);
@@ -252,7 +258,7 @@ export class Renderer {
   }
 
   drawLockedFog(game) {
-    const y = ORIG_H * TILE - this.cy;
+    const y = (game.meadowOwned ? MEADOW_END : ORIG_H) * TILE - this.cy;
     if (y > this.vh) return;
     const ctx = this.ctx;
     const g = ctx.createLinearGradient(0, y - 6, 0, y + 40);
@@ -398,7 +404,7 @@ export class Renderer {
     const def = slot && ITEMS[slot.id];
     const w = game.world;
     let area = null;
-    if (slot && (slot.id === 'bucket' || slot.id === 'sickle')) area = SPRINKLER_RANGE[1].concat([[0, 0]]);
+    if (slot && ['bucket', 'sickle', 'goldhoe', 'goldcan'].includes(slot.id)) area = SPRINKLER_RANGE[1].concat([[0, 0]]);
     if (def && def.place === 'sprinkler') area = SPRINKLER_RANGE[def.tier];
     if (area) {
       ctx.fillStyle = def && def.place === 'sprinkler' ? 'rgba(120,190,255,0.22)' : 'rgba(255,255,255,0.12)';
@@ -418,7 +424,7 @@ export class Renderer {
     ctx.globalAlpha = 1;
     if (def && def.kind === 'place' && def.place !== 'path' && w.isOpen(h.tx, h.ty) && game.canDropAt(h.tx, h.ty)) {
       ctx.globalAlpha = 0.55;
-      this.drawObject(game, { type: def.place, tier: def.tier || 0, ghost: true }, h.tx, h.ty, -1);
+      this.drawObject(game, { type: def.place, tier: def.tier || 0, ghost: true, tree: def.tree, age: 0 }, h.tx, h.ty, -1);
       ctx.globalAlpha = 1;
     }
   }
@@ -461,6 +467,9 @@ export class Renderer {
       case 'scarecrow': return { spr: ART.scarecrow, dy: -12 };
       case 'gnome': return { spr: ART.icons.gnome, dy: 0 };
       case 'flowerpot': return { spr: ART.icons.flowerpot, dy: 0 };
+      case 'beehive': case 'bench': case 'birdbath': case 'haybale': case 'statue': case 'mushroomlog': case 'jackolantern':
+      case 'stonelantern': case 'picnic': case 'sundial': case 'goldgnome': case 'campfire':
+        return { spr: ART.icons[o.type], dy: 0 };
       case 'fence': {
         const w = game.world;
         const isF = (ax, ay) => { const q = w.inBounds(ax, ay) && w.objs.get(w.idx(ax, ay)); return q && q.type === 'fence'; };
@@ -487,11 +496,95 @@ export class Renderer {
       else { drawSprite(this.ctx, C.body, x, y + 2 - fall); drawSprite(this.ctx, C.lid, x - 1, y - 2 - lift - fall); }
       return;
     }
+    if (o.type === 'fruittree') { this.drawFruitTree(game, o, x, y, hovered); return; }
     const r = this.objectSprite(game, o, tx, ty);
     if (!r) return;
+    if (o.type === 'campfire' && o.lit !== false) this.drawFlames(game, x, y, tx);
     if (hovered) this.drawOutlined(r.spr, x, y + r.dy);
     else if (o.type === 'flowerpot') this.drawSway(r.spr, x, y, Math.sin(game.t * 1.6 + tx) * this.wind * 0.6);
     else drawSprite(this.ctx, r.spr, x, y + r.dy);
+    if (o.type === 'campfire' && o.lit !== false) this.drawFlames(game, x, y, tx, true);
+    if (o.type === 'beehive') this.drawBees(game, x, y, tx, o);
+  }
+
+  drawFruitTree(game, o, x, y, hovered) {
+    const T = TREES[o.tree], K = TREE_KINDS[o.tree];
+    if (!T || !K) return;
+    const f = (o.age || 0) / (T.days * 24);
+    const ctx = this.ctx;
+    const put = (spr, px, py) => (hovered ? this.drawOutlined(spr, px, py) : drawSprite(ctx, spr, px, py));
+    if (f < 0.34) { put(ART.saplings[o.tree], x, y); return; }
+    if (f < 1) { this.shadow(x + 8, y + 14, 8, 2); put(ART.bushes[0], x - 3, y - 2); return; }
+    const spr = ART.trees[K.tree][(o.tree.length + 1) % ART.trees[K.tree].length];
+    const px = x + 8 - spr.ax, py = y + 14 - spr.ay;
+    this.shadow(x + 10, y + 14, 15, 4, 0.25);
+    const h = game.hover;
+    if (h && !hovered && h.ty < Math.floor((y + this.cy) / TILE) && h.ty > Math.floor((y + this.cy) / TILE) - 4 && Math.abs(h.tx * TILE - (x + this.cx)) <= 16) ctx.globalAlpha = 0.45;
+    if (hovered) this.drawOutlined(spr, px, py);
+    else this.drawTreeSway(spr, px, py, Math.sin(game.t * 0.9 + x * 0.05) * this.wind * 0.9);
+    if (o.fruit) {
+      const spots = [[-10, -36], [-1, -44], [9, -38], [-6, -28], [6, -30], [13, -27], [-14, -30]];
+      for (let k = 0; k < Math.min(spots.length, o.fruit * 2 + 1); k++) {
+        const [fx, fy] = spots[k];
+        const cx = Math.round(x + 8 + fx), cy = Math.round(y + 14 + fy);
+        ctx.fillStyle = K.dark; ctx.fillRect(cx - 1, cy, 4, 3); ctx.fillRect(cx, cy - 1, 2, 5);
+        ctx.fillStyle = K.fruit; ctx.fillRect(cx, cy, 2, 2);
+        ctx.fillStyle = K.light; ctx.fillRect(cx, cy, 1, 1);
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  drawFlames(game, x, y, tx, front) {
+    const ctx = this.ctx;
+    const t = game.t * 12 + tx;
+    const cols = ['#ff5a1a', '#f08a2c', '#ffd040', '#fff3a0'];
+    if (!front) return;
+    for (let k = 0; k < 5; k++) {
+      const h = 2 + Math.floor((Math.sin(t + k * 1.7) + 1) * 2.2);
+      const fx = x + 5 + k * 1.4;
+      for (let j = 0; j < h; j++) {
+        ctx.fillStyle = cols[Math.min(3, Math.floor((j / h) * 4))];
+        ctx.fillRect(Math.round(fx + Math.sin(t * 0.7 + j) * 0.6), y + 8 - j, 1, 1);
+      }
+    }
+    if (Math.random() < 0.04) game.particles.add({ type: 'smoke', x: x + 8 + this.cx, y: y + 4 + this.cy, vx: rand(-2, 2), vy: rand(-12, -8), life: 2, color: '#d8d4de', drag: 0.2 });
+  }
+
+  drawBees(game, x, y, tx, o) {
+    const h = game.hour;
+    if (h < 6.5 || h > 19.5 || game.weather.intensity > 0.3) return;
+    const ctx = this.ctx;
+    for (let k = 0; k < 3; k++) {
+      const a = game.t * (1.6 + k * 0.4) + k * 2.1 + tx;
+      const bx = Math.round(x + 8 + Math.cos(a) * (6 + k * 3)), by = Math.round(y + 6 + Math.sin(a * 1.3) * (4 + k));
+      ctx.fillStyle = '#241826'; ctx.fillRect(bx, by, 2, 1);
+      ctx.fillStyle = '#f5d44a'; ctx.fillRect(bx, by, 1, 1);
+    }
+    if (o.ready) {
+      ctx.fillStyle = '#f5c030';
+      const by = y - 3 + Math.round(Math.sin(game.t * 4));
+      ctx.fillRect(x + 7, by, 3, 3); ctx.fillStyle = '#fff3a0'; ctx.fillRect(x + 7, by, 1, 1);
+    }
+  }
+
+  drawCat(game) {
+    const c = game.cat;
+    const X = ART.x.cat;
+    const spr = c.state === 'sleep' ? X.sleep : c.state === 'walk' ? X.walk[Math.floor(c.f) % 2] : X.sit;
+    const x = Math.round(c.x - 7 - this.cx), y = Math.round(c.y - spr.h + 2 - this.cy);
+    this.shadow(c.x - this.cx, c.y - this.cy, 5, 1, 0.25);
+    const ctx = this.ctx;
+    ctx.save();
+    if (c.flip) { ctx.translate(x * 2 + spr.w - 2, 0); ctx.scale(-1, 1); }
+    if (this.hl === 'cat') this.drawOutlined(spr, x, y);
+    else drawSprite(ctx, spr, x, y);
+    ctx.restore();
+    if (c.state === 'sleep' && Math.sin(game.t * 1.5) > 0.6) {
+      ctx.fillStyle = '#d4efff';
+      const zy = y - 4 - Math.round((game.t * 3) % 4);
+      ctx.fillRect(x + 12, zy, 3, 1); ctx.fillRect(x + 13, zy + 1, 1, 1); ctx.fillRect(x + 12, zy + 2, 3, 1);
+    }
   }
 
   drawCarried(game) {
@@ -582,6 +675,10 @@ export class Renderer {
           for (const wd of H.windows) { ctx.fillRect(x + wd.x + 7, y + wd.y, 1, wd.h); ctx.fillRect(x + wd.x, y + wd.y + 6, wd.w, 1); }
         }
         ctx.globalAlpha = 1;
+        const M = LAYOUT.mailbox;
+        const mx = M.tx * TILE - this.cx + 1 + this.shakeOf('mail'), my = (M.ty + 1) * TILE - this.cy - 10;
+        if (this.hl === 'mail') this.drawOutlined(ART.x.mailbox, mx, my); else drawSprite(ctx, ART.x.mailbox, mx, my);
+        if (game.mail) drawSprite(ctx, ART.x.flag, mx + 10, my - 1 + (Math.sin(game.t * 3) > 0.8 ? -1 : 0));
         break;
       }
       case 'stall': {
@@ -600,6 +697,27 @@ export class Renderer {
       }
       case 'well': put(ART.well, bx - 1, by - 45); break;
       case 'gate': put(game.meadowOwned ? ART.gate.open : ART.gate.closed, bx - 1, by - 32); break;
+      case 'gate2': put(game.hillsOwned ? ART.gate.open : ART.gate.closed, bx - 1, by - 32); break;
+      case 'wish': {
+        put(ART.wishwell, bx - 1, by - 45);
+        if (Math.random() < 0.05) game.particles.sparkle(bx + this.cx + 16 + rand(-8, 8), by + this.cy - 16, 1, ['#f08ac0', '#8ac4f0', '#fff3a0']);
+        break;
+      }
+      case 'windmill': {
+        const W = ART.windmill;
+        const x = bx, y = by - 66;
+        put(W, x, y);
+        const ang = game.t * (0.4 + game.fx.windmill * 1.6);
+        for (let k = 0; k < 4; k++) {
+          ctx.save();
+          ctx.translate(x + W.hub.x, y + W.hub.y);
+          ctx.rotate(ang + (k * Math.PI) / 2);
+          ctx.drawImage(W.blade.img, -3, -26);
+          ctx.restore();
+        }
+        ctx.fillStyle = '#5a3420'; ctx.fillRect(x + W.hub.x - 2, y + W.hub.y - 2, 4, 4);
+        break;
+      }
       case 'bin': put(ART.bin, bx, by - 23); break;
       case 'sign': put(ART.sign, bx, by - 20); break;
     }
@@ -721,7 +839,13 @@ export class Renderer {
       }
       if (s.type === 'stall') out.push({ x: (s.tx + 1.5) * TILE, y: s.ty * TILE - 4, r: 40, i: 0.7, flicker: true });
     }
-    for (const [i, o] of w.objs) if (o.type === 'lamp') out.push({ x: (i % MAP_W) * TILE + 8, y: ((i / MAP_W) | 0) * TILE - 8, r: 64, flicker: true });
+    for (const [i, o] of w.objs) {
+      const x = (i % MAP_W) * TILE + 8, y = ((i / MAP_W) | 0) * TILE;
+      if (o.type === 'lamp') out.push({ x, y: y - 8, r: 64, flicker: true });
+      else if (o.type === 'campfire' && o.lit !== false) out.push({ x, y: y + 6, r: 58, flicker: true, c: [255, 160, 80] });
+      else if (o.type === 'jackolantern') out.push({ x, y: y + 8, r: 30, flicker: true, c: [255, 170, 60] });
+      else if (o.type === 'stonelantern') out.push({ x, y: y + 6, r: 46, flicker: true });
+    }
     // magical crops glow softly at night
     let glows = 0;
     for (const [i, c] of w.crops) {

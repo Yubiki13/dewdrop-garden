@@ -1,6 +1,6 @@
 // The garden map: terrain, buildings, trees, decor, crops and placed objects.
 import {
-  MAP_W, MAP_H, ORIG_H, G_GRASS, G_SOIL, G_WATER, F_PATH,
+  MAP_W, MAP_H, ORIG_H, MEADOW_END, G_GRASS, G_SOIL, G_WATER, F_PATH,
 } from '../config.js';
 import { makeRng, fbm, hash2 } from '../core/util.js';
 
@@ -11,6 +11,9 @@ export const STRUCT_DEFS = {
   bin: { w: 2, h: 1 },
   sign: { w: 1, h: 1 },
   gate: { w: 2, h: 1 },
+  gate2: { w: 2, h: 1 },
+  wish: { w: 2, h: 2 },
+  windmill: { w: 3, h: 2 },
 };
 
 export const LAYOUT = {
@@ -32,6 +35,15 @@ export const LAYOUT = {
   meadow: { x0: 6, y0: 48, x1: 53, y1: 65 },
   lake: { cx: 13, cy: 59, rx: 5.2, ry: 3.6 },
   meadowView: { tx: 30, ty: 54 },
+  // ---- Blossom Hills (third plot, rows MEADOW_END..) ----
+  gate2: { tx: 30, ty: 68 },
+  bin3: { tx: 33, ty: 73 },
+  wish: { tx: 21, ty: 79 },
+  windmill: { tx: 9, ty: 77 },
+  hillPond: { cx: 44, cy: 87, rx: 6.4, ry: 4.4 },
+  hills: { x0: 5, y0: 74, x1: 54, y1: 95 },
+  hillsView: { tx: 30, ty: 83 },
+  mailbox: { tx: 10, ty: 7 }, // on the cottage's front corner
 };
 
 export class World {
@@ -184,6 +196,7 @@ export class World {
     this.decorate(0, ORIG_H, G, 0.18);
 
     this.generateMeadow();
+    this.generateHills();
     this.carvePassage();
     this.computeWaterDepth();
   }
@@ -226,7 +239,7 @@ export class World {
     };
     // lake + a stream winding in from the east
     const K = LAYOUT.lake;
-    for (let y = Y0; y < MAP_H; y++)
+    for (let y = Y0; y < MEADOW_END; y++)
       for (let x = 0; x < MAP_W; x++) {
         const dx = (x + 0.5 - K.cx) / K.rx, dy = (y + 0.5 - K.cy) / K.ry;
         const wob = (fbm(x / 3, y / 3, this.seed + 77, 2) - 0.5) * 0.5;
@@ -234,7 +247,7 @@ export class World {
       }
     for (let x = Math.floor(K.cx + K.rx - 1); x < MAP_W; x++) {
       const y = Math.round(K.cy + 1 + Math.sin(x * 0.32) * 1.6 + Math.max(0, x - 40) * 0.12);
-      for (const yy of [y, y + 1]) if (yy < MAP_H) this.ground[this.idx(x, yy)] = G_WATER;
+      for (const yy of [y, y + 1]) if (yy < MEADOW_END) this.ground[this.idx(x, yy)] = G_WATER;
     }
     markClear(M.x0, M.y0, M.x1, M.y1);
     markClear(Math.floor(K.cx - K.rx - 1), Math.floor(K.cy - K.ry - 1), Math.ceil(K.cx + K.rx + 1), Math.ceil(K.cy + K.ry + 1));
@@ -250,18 +263,18 @@ export class World {
       this.addProp({ type: 'tree', kind, v: Math.floor(rng() * 6), tx, ty, solid: true, ox: 0 });
     };
     // forest on the sides and bottom (the top is the old forest edge)
-    for (let ty = Y0; ty < MAP_H + 2; ty += 2)
+    for (let ty = Y0; ty < MEADOW_END + 2; ty += 2)
       for (let tx = 0; tx < MAP_W + 2; tx += 2) {
         const jx = tx + Math.floor(rng() * 2), jy = ty + Math.floor(rng() * 2);
-        if (jx >= MAP_W || jy >= MAP_H) continue;
-        const e = Math.min(jx, MAP_W - 1 - jx, MAP_H - 1 - jy, (jy - Y0) * 1.6);
+        if (jx >= MAP_W || jy >= MEADOW_END) continue;
+        const e = Math.min(jx, MAP_W - 1 - jx, MEADOW_END - 1 - jy, (jy - Y0) * 1.6);
         const band = 2.2 + fbm(jx / 6, jy / 6, this.seed + 70, 2) * 3.2;
         if (e > band) continue;
         placeTree(rng() < 0.4 ? 'pine' : rng() < 0.2 ? 'cherry' : 'oak', jx, jy);
       }
     for (const [k, x, y] of [['cherry', 8, 50], ['maple', 52, 49], ['cherry', 22, 66], ['oak', 44, 66], ['maple', 5, 63], ['cherry', 55, 60]]) placeTree(k, x, y);
     for (let i = 0; i < 26; i++) {
-      const tx = 2 + Math.floor(rng() * (MAP_W - 4)), ty = Y0 + 1 + Math.floor(rng() * (MAP_H - Y0 - 3));
+      const tx = 2 + Math.floor(rng() * (MAP_W - 4)), ty = Y0 + 1 + Math.floor(rng() * (MEADOW_END - Y0 - 3));
       const ii = this.idx(tx, ty);
       if (clear[ii] || this.prop[ii] >= 0 || this.ground[ii] === G_WATER) continue;
       const r = rng();
@@ -269,8 +282,61 @@ export class World {
         : { type: 'rock', v: Math.floor(rng() * 4), tx, ty, solid: true, ox: Math.floor(rng() * 4) - 2 });
     }
     this.computeWaterDepth();
+    this.lilyAndReeds(rng, Y0, MEADOW_END - 1);
+    this.decorate(Y0, MEADOW_END, M, 0.4);
+  }
+
+  /** Blossom Hills: the third plot. Its own random stream, so it never disturbs the areas above. */
+  generateHills() {
+    const rng = makeRng((this.seed ^ 0x51ed270b) >>> 0);
+    const Y0 = MEADOW_END;
+    const Hz = LAYOUT.hills;
+    const clear = new Uint8Array(MAP_W * MAP_H);
+    const markClear = (x0, y0, x1, y1) => {
+      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (this.inBounds(x, y)) clear[this.idx(x, y)] = 1;
+    };
+    // pond with a little island in the middle
+    const P = LAYOUT.hillPond;
+    for (let y = Y0; y < MAP_H; y++)
+      for (let x = 0; x < MAP_W; x++) {
+        const dx = (x + 0.5 - P.cx) / P.rx, dy = (y + 0.5 - P.cy) / P.ry;
+        const d = dx * dx + dy * dy + (fbm(x / 3, y / 3, this.seed + 91, 2) - 0.5) * 0.4;
+        if (d < 1 && d > 0.09) this.ground[this.idx(x, y)] = G_WATER;
+      }
+    markClear(Hz.x0, Hz.y0, Hz.x1, Hz.y1);
+    markClear(26, Y0, 34, Hz.y0);
+    markClear(Math.floor(P.cx - P.rx - 1), Math.floor(P.cy - P.ry - 1), Math.ceil(P.cx + P.rx + 1), Math.ceil(P.cy + P.ry + 1));
+    // landmarks
+    this.addStructure('bin', LAYOUT.bin3.tx, LAYOUT.bin3.ty);
+    this.addStructure('wish', LAYOUT.wish.tx, LAYOUT.wish.ty);
+    this.addStructure('windmill', LAYOUT.windmill.tx, LAYOUT.windmill.ty);
+    // a cherry tree on the island
+    const isl = this.idx(Math.floor(P.cx), Math.floor(P.cy));
+    if (this.ground[isl] !== G_WATER) this.addProp({ type: 'tree', kind: 'cherry', v: 1, tx: Math.floor(P.cx), ty: Math.floor(P.cy), solid: true, ox: 0 });
+    const placeTree = (kind, tx, ty) => {
+      if (!this.inBounds(tx, ty) || ty < Y0 || clear[this.idx(tx, ty)] || this.prop[this.idx(tx, ty)] >= 0) return;
+      if (this.ground[this.idx(tx, ty)] === G_WATER) return;
+      this.addProp({ type: 'tree', kind, v: Math.floor(rng() * 6), tx, ty, solid: true, ox: 0 });
+    };
+    for (let ty = Y0; ty < MAP_H + 2; ty += 2)
+      for (let tx = 0; tx < MAP_W + 2; tx += 2) {
+        const jx = tx + Math.floor(rng() * 2), jy = ty + Math.floor(rng() * 2);
+        if (jx >= MAP_W || jy >= MAP_H) continue;
+        const e = Math.min(jx, MAP_W - 1 - jx, MAP_H - 1 - jy, (jy - Y0) * 1.6);
+        const band = 2.2 + fbm(jx / 6, jy / 6, this.seed + 95, 2) * 3.2;
+        if (e > band) continue;
+        placeTree(rng() < 0.35 ? 'cherry' : rng() < 0.3 ? 'maple' : rng() < 0.5 ? 'pine' : 'oak', jx, jy);
+      }
+    for (let i = 0; i < 22; i++) {
+      const tx = 2 + Math.floor(rng() * (MAP_W - 4)), ty = Y0 + 1 + Math.floor(rng() * (MAP_H - Y0 - 3));
+      const ii = this.idx(tx, ty);
+      if (clear[ii] || this.prop[ii] >= 0 || this.ground[ii] === G_WATER) continue;
+      this.addProp(rng() < 0.65 ? { type: 'bush', v: Math.floor(rng() * 5), tx, ty, solid: true, ox: Math.floor(rng() * 4) - 2 }
+        : { type: 'rock', v: Math.floor(rng() * 4), tx, ty, solid: true, ox: Math.floor(rng() * 4) - 2 });
+    }
+    this.computeWaterDepth();
     this.lilyAndReeds(rng, Y0, MAP_H - 1);
-    this.decorate(Y0, MAP_H, M, 0.4);
+    this.decorate(Y0, MAP_H, Hz, 0.7);
   }
 
   /** Cut a path through the old forest edge down to the meadow gate. Safe to re-run after loading a save. */
@@ -283,13 +349,23 @@ export class World {
       this.props.forEach((p, i) => { this.prop[this.idx(p.tx, p.ty)] = i; });
     }
     if (!this.structures.some((s) => s.type === 'gate')) this.addStructure('gate', g.tx, g.ty);
-    for (let y = 34; y <= ORIG_H + 3; y++)
-      for (const x of [g.tx, g.tx + 1]) {
-        const i = this.idx(x, y);
-        if (y === g.ty || this.ground[i] !== G_GRASS || this.objs.has(i) || this.crops.has(i)) continue;
-        this.floor[i] = F_PATH;
-        this.deco[i] = 0;
-      }
+    const pave = (x, y) => {
+      const i = this.idx(x, y);
+      if (this.ground[i] !== G_GRASS || this.objs.has(i) || this.crops.has(i) || this.struct[i] >= 0) return;
+      this.floor[i] = F_PATH;
+      this.deco[i] = 0;
+    };
+    for (let y = 34; y <= ORIG_H + 3; y++) if (y !== g.ty) { pave(g.tx, y); pave(g.tx + 1, y); }
+    // ...and from the bottom of the meadow down to Blossom Hills
+    const g2 = LAYOUT.gate2;
+    const keep2 = this.props.filter((p) => !(p.tx >= g2.tx - 2 && p.tx <= g2.tx + 3 && p.ty >= 63 && p.ty <= MEADOW_END + 3));
+    if (keep2.length !== this.props.length) {
+      this.props = keep2;
+      this.prop.fill(-1);
+      this.props.forEach((p, i) => { this.prop[this.idx(p.tx, p.ty)] = i; });
+    }
+    if (!this.structures.some((s) => s.type === 'gate2')) this.addStructure('gate2', g2.tx, g2.ty);
+    for (let y = 66; y <= MEADOW_END + 3; y++) if (y !== g2.ty) { pave(g2.tx, y); pave(g2.tx + 1, y); }
   }
 
   addStructure(type, tx, ty) {

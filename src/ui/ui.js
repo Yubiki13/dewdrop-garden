@@ -1,7 +1,9 @@
 // DOM user interface: HUD, hotbar, dialog, backpack, shop, shipping bin, menus, title + character creator.
 import { ART, iconURL } from '../art/index.js';
 import { sprite, drawSprite } from '../art/palette.js';
-import { ITEMS, SHOP_SEEDS, SHOP_GOODS, isStackable, STACK_MAX } from '../data/items.js';
+import { ITEMS, SHOP_SEEDS, SHOP_GOODS, SHOP_DECOR, isStackable, STACK_MAX } from '../data/items.js';
+import { ACHIEVEMENTS, TIERS } from '../game/achievements.js';
+import { HILLS_PRICE } from '../config.js';
 import { CHANGELOG } from '../data/changelog.js';
 import { CROPS } from '../data/crops.js';
 import { audio } from '../core/audio.js';
@@ -77,6 +79,7 @@ export class UI {
       <div id="hud" class="hidden">
         <div id="clock" class="panel"></div>
         <button id="lbbtn" class="btn small" title="Leaderboard"><img class="icon" style="width:calc(var(--p)*11)"> Leaderboard</button>
+        <button id="achbtn" class="btn small" title="Achievements"><img class="icon" style="width:calc(var(--p)*9)"> <span>Achievements</span></button>
         <div id="quest" class="panel hidden"></div>
         <div id="hotbar"></div>
         <div id="itemname" class="dark" style="opacity:0"></div>
@@ -94,6 +97,8 @@ export class UI {
     $('#lbbtn img').src = this.trophyURL;
     if (!leaderboard.enabled) $('#lbbtn').classList.add('hidden');
     $('#lbbtn').addEventListener('click', () => { audio.play('ui'); this.openLeaderboard(); });
+    $('#achbtn img').src = ART.x.medals[2].img.toDataURL();
+    $('#achbtn').addEventListener('click', () => { audio.play('ui'); this.openAchievements(); });
     $('#dialog').addEventListener('click', () => this.advanceDialog());
     document.getElementById('world').addEventListener('mousedown', () => { if (this.dialogState) this.advanceDialog(); });
     $('#modal-root').addEventListener('mousedown', (e) => {
@@ -158,6 +163,8 @@ export class UI {
       openSell: () => this.openSell(),
       confirmSleep: () => this.confirmSleep(),
       confirmMeadow: () => this.confirmMeadow(),
+      confirmHills: () => this.confirmHills(),
+      achievement: (a, reward) => this.achievementToast(a, reward),
       newDay: () => this.onNewDay(),
       isVisible: (i) => this.app.renderer.isVisibleTile(i),
       toolbarWorldPos: () => {
@@ -563,7 +570,7 @@ export class UI {
   /* ---------------------------- shop ---------------------------- */
 
   openShop(tab = this.shopTab || 'seeds') {
-    const tabs = [['seeds', 'Seeds'], ['goods', 'Tools &amp; Decor'], ['land', 'Land']];
+    const tabs = [['seeds', 'Seeds'], ['goods', 'Garden'], ['decor', 'Decor'], ['land', 'Land']];
     if (!tabs.some(([k]) => k === tab)) tab = 'seeds';
     const el = h(`<div class="modal panel">
       <button class="btn close">✕</button>
@@ -598,7 +605,24 @@ export class UI {
     $('#modal-root h2 .sub').innerHTML = this.coinsHTML(g.sandbox ? '∞' : g.coins, 12);
     list.innerHTML = '';
     if (this.shopTab === 'land') { this.renderLand(list); return; }
-    const ids = this.shopTab === 'seeds' ? SHOP_SEEDS : SHOP_GOODS;
+    let ids = this.shopTab === 'seeds' ? SHOP_SEEDS : this.shopTab === 'decor' ? SHOP_DECOR : SHOP_GOODS;
+    if (this.shopTab === 'seeds') {
+      // search + category filter for the 156 seeds
+      const bar = h(`<div class="seedbar"><input type="text" class="search" placeholder="Search seeds..." spellcheck="false" value="${esc(this.seedSearch || '')}">
+        ${[['all', 'All'], ['veg', 'Veggies'], ['fruit', 'Fruit'], ['flower', 'Flowers'], ['herb', 'Herbs'], ['magic', 'Magical']].map(([k, n]) => `<button class="btn small chip ${(this.seedCat || 'all') === k ? 'on' : ''}" data-cat="${k}">${n}</button>`).join('')}</div>`);
+      list.appendChild(bar);
+      const inp = $('.search', bar);
+      inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Escape') this.closeModal(); });
+      inp.addEventListener('input', () => { this.seedSearch = inp.value; this.renderShop(); const n = $('#modal-root .search'); if (n) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); } });
+      bar.querySelectorAll('[data-cat]').forEach((b) => b.addEventListener('click', () => { this.seedCat = b.dataset.cat; audio.play('select'); this.renderShop(); }));
+      const q = (this.seedSearch || '').trim().toLowerCase();
+      const cat = this.seedCat || 'all';
+      ids = ids.filter((id) => {
+        const c = CROPS[ITEMS[id].crop];
+        return (cat === 'all' || c.cat === cat) && (!q || ITEMS[id].name.toLowerCase().includes(q));
+      });
+      if (!ids.length) list.appendChild(h('<div class="lbmsg">No seeds match that search.</div>'));
+    }
     for (const id of ids) {
       const def = ITEMS[id];
       const owned = g.count(id);
@@ -608,12 +632,12 @@ export class UI {
       if (def.kind === 'seed') {
         const c = CROPS[def.crop];
         desc = `${c.hours}h to grow${c.regrow ? ` · regrows every ${c.regrow}h` : ''} · sells ${fmt(c.sell)}c${c.yield ? ' ×' + c.yield : ''}`;
-        if (id === 'seed_dewdroplily') desc += ' · the best seed!';
+
       }
       const qty = this.shopQty[id] || 1;
       const row = h(`<div class="shoprow paper ${cant ? 'cant' : ''}">
         <div class="iconbox slot">${this.slotIcon({ id })}</div>
-        <div class="info"><div class="nm">${esc(def.name)}${def.kind === 'seed' && CROPS[def.crop].rare ? ' <span class="tag new">new</span>' : ''}${def.kind === 'seed' && CROPS[def.crop].glow ? ' <span class="tag">glows</span>' : ''}</div><div class="ds">${esc(desc)}</div>
+        <div class="info"><div class="nm">${esc(def.name)}${def.kind === 'seed' && CROPS[def.crop].big ? ' <span class="tag new">new</span>' : ''}${id === 'seed_celestiallotus' ? ' <span class="tag best">best</span>' : ''}${def.kind === 'seed' && CROPS[def.crop].glow ? ' <span class="tag">glows</span>' : ''}</div><div class="ds">${esc(desc)}</div>
           <div class="own">${isTool ? (owned ? 'Owned' : '') : owned ? 'You have ' + fmt(owned) : ''}</div></div>
         <div class="price">${g.sandbox ? 'Free' : this.coinsHTML(def.price)}${isTool || g.sandbox ? '' : '<span class="each">each</span>'}</div>
         <div class="buybox">
@@ -679,7 +703,77 @@ export class UI {
       }, 'Not yet');
     });
     list.appendChild(row);
-    list.appendChild(h(`<div class="hint" style="margin-top:var(--p)">More land may come in a future update.</div>`));
+    const hOwned = g.hillsOwned;
+    const cant2 = !hOwned && (!owned || (!g.sandbox && g.coins < HILLS_PRICE));
+    const row2 = h(`<div class="shoprow paper land ${cant2 ? 'cant' : ''}">
+      <div class="iconbox slot"><img class="icon" src="${ART.wishwell.img.toDataURL()}" style="width:calc(var(--p)*16)"></div>
+      <div class="info"><div class="nm">Blossom Hills</div>
+        <div class="ds">The biggest plot yet, south of the meadow: rolling flower fields, a pond with golden koi, a windmill and a
+        magical Wishing Well. ${owned ? '' : '(Buy the Riverside Meadow first.)'}</div></div>
+      <div class="price">${hOwned ? 'Yours!' : g.sandbox ? 'Free' : this.coinsHTML(HILLS_PRICE)}</div>
+      <div class="buybox"><button class="btn small buy">${hOwned ? 'Visit' : 'Buy land'}</button></div>
+    </div>`);
+    const b2 = $('.buy', row2);
+    if (cant2) b2.disabled = true;
+    b2.addEventListener('click', () => {
+      if (hOwned) { this.closeModal(); g.visitHills(); return; }
+      this.confirm('Buy Blossom Hills?', `This costs ${fmt(HILLS_PRICE)} coins. The second gate opens right away.`, 'Buy it!', () => {
+        if (g.buyHills()) this.renderClock(true);
+      }, 'Not yet');
+    });
+    list.appendChild(row2);
+  }
+
+  confirmHills() {
+    const g = this.game;
+    if (g.hillsOwned) { g.visitHills(); return; }
+    if (!g.sandbox && g.coins < HILLS_PRICE) {
+      this.confirm('Blossom Hills', `Rolling flower fields, golden koi and a Wishing Well are waiting past this gate! It costs ${fmt(HILLS_PRICE)} coins and you have ${fmt(g.coins)}.`, 'Show me seeds', () => this.openShop('seeds'), 'Okay');
+      return;
+    }
+    this.confirm('Buy Blossom Hills?', `The biggest plot of all, for ${g.sandbox ? 'free (sandbox)' : fmt(HILLS_PRICE) + ' coins'}.`, 'Buy it!', () => { if (g.buyHills()) this.renderClock(true); }, 'Not yet');
+  }
+
+  /* ---------------------------- achievements ---------------------------- */
+
+  openAchievements(back) {
+    const g = this.game;
+    const tr = g.ach;
+    tr.cacheDirty = true;
+    const rows = ACHIEVEMENTS.map((a) => {
+      const p = tr.progress(a);
+      const pct = p.target ? Math.min(100, (p.v / p.target) * 100) : 0;
+      const showNum = p.target > 1;
+      return `<div class="achrow paper ${p.done ? 'done' : ''}">
+        <img class="icon medal" src="${ART.x.medals[a.tier].img.toDataURL()}" style="width:calc(var(--p)*12)">
+        <div class="info"><div class="nm">${esc(a.name)}${p.done ? ' <span class="tag new">unlocked</span>' : ''}</div><div class="ds">${esc(a.desc)}</div>
+          ${p.done ? '' : `<div class="achbar"><i style="width:${pct}%"></i></div>`}</div>
+        <div class="achval">${showNum ? `<span class="num">${fmt(p.v)}</span><span class="of">/ ${fmt(p.target)}</span>` : p.done ? '✓' : ''}
+          <span class="rw">${g.sandbox ? '' : '+' + fmt(TIERS[a.tier].reward) + 'c'}</span></div>
+      </div>`;
+    });
+    let html = '';
+    ACHIEVEMENTS.forEach((a, k) => {
+      if (k === 0 || ACHIEVEMENTS[k - 1].tier !== a.tier) html += `<div class="achtier t${a.tier}">${TIERS[a.tier].name}</div>`;
+      html += rows[k];
+    });
+    const el = h(`<div class="modal panel" style="width:min(calc(var(--p)*230), 94vw)">
+      <button class="btn close">✕</button>
+      <h2><img class="icon" src="${ART.x.medals[2].img.toDataURL()}" style="width:calc(var(--p)*13)"> Achievements <span class="sub"><span class="num">${tr.count} / ${ACHIEVEMENTS.length}</span></span></h2>
+      <div class="hint" style="margin:0 0 calc(var(--p)*3)">Easiest at the top, toughest at the bottom. Rewards are paid automatically.</div>
+      <div class="scroll achlist" style="max-height:66vh">${html}</div>
+    </div>`);
+    this.openModal('achievements', el);
+    this.onModalClosed = (name) => { this.onModalClosed = null; if (name === 'achievements' && back) back(); };
+  }
+
+  achievementToast(a, reward) {
+    const box = $('#toasts');
+    const el = h(`<div class="toast achtoast panel"><img class="icon" src="${ART.x.medals[a.tier].img.toDataURL()}" style="width:calc(var(--p)*14)">
+      <div><div class="at1">Achievement unlocked!</div><div class="at2">${esc(a.name)}</div>${reward ? `<div class="at3">+${fmt(reward)} coins</div>` : ''}</div></div>`);
+    box.prepend(el);
+    setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 500); }, 4500);
+    this.renderClock(true);
   }
 
   meadowIcon() {
@@ -867,6 +961,7 @@ export class UI {
         ${leaderboard.enabled ? '<button class="btn" data-a="lb">Leaderboard</button>' : ''}
         <button class="btn" data-a="settings">Settings</button>
         <button class="btn" data-a="help">How to Play</button>
+        <button class="btn" data-a="ach">Achievements</button>
         <button class="btn" data-a="news">What's New</button>
         <button class="btn" data-a="save">Save Game</button>
         <button class="btn" data-a="quit">Save &amp; Quit to Title</button>
@@ -877,6 +972,7 @@ export class UI {
       if (a === 'resume') this.closeModal();
       if (a === 'inv') this.openInventory();
       if (a === 'news') this.openChangelog(() => this.openMenu());
+      if (a === 'ach') this.openAchievements(() => this.openMenu());
       if (a === 'lb') this.openLeaderboard(() => this.openMenu());
       if (a === 'settings') this.openSettings(() => this.openMenu());
       if (a === 'help') this.openHelp(() => this.openMenu());
@@ -950,6 +1046,9 @@ export class UI {
         damp (dark). Watered soil dries out after about a day.<br><br>
         <b>Water:</b> the Watering Can soaks one tile, the Bucket soaks 3×3. Refill both at the pond or the well.
         Sprinklers water their area every morning at 6:00, and rain waters everything.<br><br>
+        <b>Extras:</b> catch fish with the Fishing Net, collect honey from beehives, pick fruit from your trees,
+        check the mailbox by the cottage every morning, make a wish at the Wishing Well in Blossom Hills, and pet Mochi.
+        Open <b>Achievements</b> (top left) to see everything there is to do.<br><br>
         <b>Coins:</b> drag crops from your toolbar onto the Shipping Bin (or click it) to sell them, then spend
         your coins at Basil's market stall. Orders arrive in a crate.<br><br>
         <b>Time:</b> a full day takes about 8 minutes. Click the cottage to sleep until morning.

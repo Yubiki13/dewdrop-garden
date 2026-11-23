@@ -27,10 +27,50 @@ for (const [id, c] of Object.entries(CROPS)) {
   ITEMS[id] = { name: c.name, kind: 'produce', icon: 'crop_' + id, sell: c.sell, desc: `Sells for ${c.sell} coins.` };
 }
 
+// ---- v1.2 expansion items ----
+Object.assign(ITEMS, {
+  goldhoe:   { name: 'Golden Hoe', kind: 'tool', icon: 'goldhoe', price: 25000, desc: 'Tills a whole 3×3 patch with every swing.' },
+  goldcan:   { name: 'Golden Watering Can', kind: 'tool', icon: 'goldcan', capacity: 150, price: 15000, desc: 'Holds 150 splashes and waters a 3×3 patch.' },
+  net:       { name: 'Fishing Net', kind: 'tool', icon: 'net', price: 400, desc: 'Click a fish in the water to scoop it up.' },
+  sprinkler4: { name: 'Rainbow Sprinkler', kind: 'place', icon: 'sprinkler3', place: 'sprinkler', tier: 3, price: 12000, desc: 'Waters a huge 7×7 area every morning.' },
+  beehive:   { name: 'Beehive', kind: 'place', icon: 'beehive', place: 'beehive', price: 2500, desc: 'Makes a jar of honey every day. Flowers nearby make Wildflower Honey!' },
+  bench:     { name: 'Garden Bench', kind: 'place', icon: 'bench', place: 'bench', price: 300, desc: 'A nice spot to sit and watch things grow.' },
+  birdbath:  { name: 'Birdbath', kind: 'place', icon: 'birdbath', place: 'birdbath', price: 600, desc: 'Little birds stop by for a splash.' },
+  campfire:  { name: 'Campfire', kind: 'place', icon: 'campfire', place: 'campfire', price: 800, desc: 'Crackles and glows. Click it to light or put it out.' },
+  haybale:   { name: 'Hay Bale', kind: 'place', icon: 'haybale', place: 'haybale', price: 150, desc: 'Rustic and cozy.' },
+  statue:    { name: 'Owl Statue', kind: 'place', icon: 'statue', place: 'statue', price: 3000, desc: 'A wise stone owl keeps watch.' },
+  mushroomlog: { name: 'Mushroom Log', kind: 'place', icon: 'mushroomlog', place: 'mushroomlog', price: 250, desc: 'An old log with tiny mushrooms.' },
+  jackolantern: { name: 'Jack-o\'-Lantern', kind: 'place', icon: 'jackolantern', place: 'jackolantern', price: 500, desc: 'Glows with a spooky grin at night.' },
+  stonelantern: { name: 'Stone Lantern', kind: 'place', icon: 'stonelantern', place: 'stonelantern', price: 1200, desc: 'A calm light for evening walks.' },
+  picnic:    { name: 'Picnic Blanket', kind: 'place', icon: 'picnic', place: 'picnic', price: 200, desc: 'Perfect for a sunny afternoon.' },
+  sundial:   { name: 'Sundial', kind: 'place', icon: 'sundial', place: 'sundial', price: 900, desc: 'Tells the time, as long as it\'s sunny.' },
+  goldgnome: { name: 'Golden Gnome', kind: 'place', icon: 'goldgnome', place: 'goldgnome', desc: 'A very rare, very shiny gnome.' },
+  honey:     { name: 'Honey', kind: 'produce', icon: 'honey', sell: 180, desc: 'Sells for 180 coins.' },
+  wildhoney: { name: 'Wildflower Honey', kind: 'produce', icon: 'wildhoney', sell: 420, desc: 'Sells for 420 coins.' },
+});
+export const FISH_TYPES = {
+  koi: { name: 'Koi', sell: 120 }, whitekoi: { name: 'White Koi', sell: 160 }, goldfish: { name: 'Goldfish', sell: 90 },
+  carp: { name: 'Carp', sell: 70 }, minnow: { name: 'Minnow', sell: 40 }, goldkoi: { name: 'Golden Koi', sell: 2500 },
+};
+for (const [k, f] of Object.entries(FISH_TYPES)) ITEMS['fish_' + k] = { name: f.name, kind: 'produce', icon: 'fish_' + k, sell: f.sell, fish: true, desc: `A fish! Sells for ${f.sell} coins.` };
+export const TREES = {
+  apple: { name: 'Apple', price: 1500, sell: 90, days: 3 }, peach: { name: 'Peach', price: 2500, sell: 140, days: 3 },
+  orange: { name: 'Orange', price: 3500, sell: 190, days: 4 }, cherry: { name: 'Cherry', price: 5000, sell: 260, days: 4 },
+  plum: { name: 'Plum', price: 7500, sell: 380, days: 5 },
+};
+for (const [k, t] of Object.entries(TREES)) {
+  ITEMS['sapling_' + k] = { name: t.name + ' Sapling', kind: 'place', icon: 'sapling_' + k, place: 'fruittree', tree: k, price: t.price,
+    desc: `Grows into a ${t.name.toLowerCase()} tree in ${t.days} days, then gives 3 fruit every day. No watering needed.` };
+  ITEMS['fruit_' + k] = { name: t.name, kind: 'produce', icon: 'fruit_' + k, sell: t.sell, desc: `Sells for ${t.sell} coins.` };
+}
+
 export const STACK_MAX = 99;
 
 export const SHOP_SEEDS = Object.keys(CROPS).sort((a, b) => CROPS[a].seedPrice - CROPS[b].seedPrice).map((id) => 'seed_' + id);
-export const SHOP_GOODS = ['fertilizer', 'bucket', 'sickle', 'sprinkler', 'sprinkler2', 'sprinkler3', 'path', 'fence', 'flowerpot', 'lamp', 'scarecrow', 'gnome'];
+export const SHOP_GOODS = ['fertilizer', 'bucket', 'sickle', 'net', 'goldcan', 'goldhoe', 'sprinkler', 'sprinkler2', 'sprinkler3', 'sprinkler4', 'beehive',
+  'sapling_apple', 'sapling_peach', 'sapling_orange', 'sapling_cherry', 'sapling_plum'];
+export const SHOP_DECOR = ['path', 'fence', 'flowerpot', 'haybale', 'picnic', 'mushroomlog', 'bench', 'jackolantern', 'birdbath', 'campfire', 'sundial',
+  'lamp', 'scarecrow', 'stonelantern', 'gnome', 'statue'];
 
 export function isStackable(id) {
   return ITEMS[id] && ITEMS[id].kind !== 'tool';

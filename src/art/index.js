@@ -5,9 +5,25 @@ import {
   makeLilyPad, makeReeds, makeDeco, makeButterfly, makeFence, makeCrate, makeGate,
 } from './procedural.js';
 import { CROPS } from '../data/crops.js';
+import { buildExpansionArt, buildSaplings, makeWishWell, makeWindmill, TREE_KINDS } from './expansion.js';
+import { sprite as spr } from './palette.js';
 import { ITEMS } from '../data/items.js';
 
 export const ART = {};
+
+const GNOME_ROWS = [
+  '................', '.......r........', '......rR........', '......RRR.......', '.....pRRRR......',
+  '.....RRRRRR.....', '....RRRRRRRr....', '....wffffffw....', '....wfkffkfw....',
+  '....wwfFFfww....', '....wwwwwwww....', '...UwwwwwwwwU...', '...UUwwwwwwUU...',
+  '....UUUUUUUU....', '....bb....bb....', '................',
+];
+// tree fruit icons reuse the round-fruit icon in each fruit's colours
+const ORB_ICON = ['................', '................', '........hG......', '.......hGg......', '.....LLAg.......', '....LAAAAAa.....',
+  '...LAAXAAAAa....', '...AAXAAAAAa....', '...AAAAAAAaa....', '...AAAAAAaaa....', '....aAAAaaa.....', '.....aaaaa......',
+  '................', '................', '................', '................'];
+function recolorOrb(t) {
+  return spr(ORB_ICON, { overrides: { A: t.fruit, a: t.dark, L: t.light, X: '#ffffff' } });
+}
 
 export function buildArt() {
   ART.crops = {};
@@ -56,6 +72,23 @@ export function buildArt() {
   ART.giftCrate = makeCrate(true);
   ART.gate = { closed: makeGate(false), open: makeGate(true) };
   ART.fish = buildFish();
+  // ---- v1.2 expansion ----
+  const X = (ART.x = buildExpansionArt());
+  Object.assign(ART.icons, {
+    goldhoe: X.goldhoe, goldcan: X.goldcan, net: X.net, honey: X.honey, wildhoney: X.wildhoney, beehive: X.beehive,
+    bench: X.bench, birdbath: X.birdbath, campfire: X.campfire, haybale: X.haybale, statue: X.statue, mushroomlog: X.mushroomlog,
+    jackolantern: X.jackolantern, stonelantern: X.stonelantern, picnic: X.picnic, sundial: X.sundial, letter: X.letter,
+  });
+  for (const [k, f] of Object.entries(X.fish)) ART.icons['fish_' + k] = f;
+  ART.saplings = buildSaplings();
+  for (const [k, t] of Object.entries(TREE_KINDS)) {
+    ART.icons['sapling_' + k] = ART.saplings[k];
+    ART.icons['fruit_' + k] = recolorOrb(t);
+  }
+  ART.goldgnome = spr(GNOME_ROWS, { overrides: { r: '#c98f22', R: '#f5d44a', p: '#fff3a0', U: '#c98f22', w: '#fff3a0' } });
+  ART.icons.goldgnome = ART.goldgnome;
+  ART.wishwell = makeWishWell();
+  ART.windmill = makeWindmill();
   ART.fences = [];
   for (let m = 0; m < 16; m++) ART.fences.push(makeFence(m));
   return ART;

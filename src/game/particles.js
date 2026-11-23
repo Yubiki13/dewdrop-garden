@@ -106,6 +106,13 @@ export class Particles {
           ctx.fillRect(x, y, 2, 1);
           if (Math.sin(p.life * 6) > 0) ctx.fillRect(x + 1, y + 1, 1, 1);
           break;
+        case 'heart':
+          ctx.fillStyle = '#241826';
+          ctx.fillRect(x - 3, y - 2, 7, 4); ctx.fillRect(x - 2, y + 2, 5, 1); ctx.fillRect(x - 1, y + 3, 3, 1);
+          ctx.fillStyle = '#f04a7a';
+          ctx.fillRect(x - 2, y - 1, 2, 2); ctx.fillRect(x + 1, y - 1, 2, 2); ctx.fillRect(x - 2, y + 1, 5, 1); ctx.fillRect(x - 1, y + 2, 3, 1);
+          ctx.fillStyle = '#ffd0e0'; ctx.fillRect(x - 2, y - 1, 1, 1);
+          break;
         case 'item':
           ctx.globalAlpha = 1;
           drawSprite(ctx, p.spr, x - 8, y - 8);

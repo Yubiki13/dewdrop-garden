@@ -1,9 +1,11 @@
-export const VERSION = '1.1.0';
+export const VERSION = '1.2.0';
 export const TILE = 16;
 export const MAP_W = 60;
 export const ORIG_H = 44; // rows of the original garden
-export const MAP_H = 70; // + the Riverside Meadow below it
+export const MEADOW_END = 70; // + the Riverside Meadow below it (rows ORIG_H..69)
+export const MAP_H = 100; // + Blossom Hills below that (rows 70..99)
 export const MEADOW_PRICE = 50000;
+export const HILLS_PRICE = 500000;
 
 export const HOUR_SECONDS = 20; // real seconds per in-game hour (a full day ≈ 8 minutes)
 export const WET_HOURS = 22; // how long watered soil stays wet

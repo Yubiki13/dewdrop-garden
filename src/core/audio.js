@@ -229,6 +229,11 @@ export class AudioEngine {
         this.tone({ freq: 300 * r(), glide: 160, dur: 0.1, vol: 0.28, type: 'triangle' });
         this.noiseBurst({ dur: 0.06, vol: 0.18, freq: 1800 });
         break;
+      case 'trash':
+        this.noiseBurst({ dur: 0.12, vol: 0.22, freq: 2600, type: 'bandpass', q: 3 });
+        this.tone({ freq: 340 * r(), glide: 150, dur: 0.12, vol: 0.22, type: 'square' });
+        this.tone({ freq: 1180, t: 0.04, dur: 0.18, vol: 0.05, type: 'triangle', send: 0.3 });
+        break;
       case 'knock':
         this.tone({ freq: (opt.n === 2 ? 210 : 260) * r(), glide: 120, dur: 0.09, vol: 0.4, type: 'triangle' });
         this.noiseBurst({ dur: 0.05, vol: 0.3, freq: 1400, type: 'bandpass', q: 2 });

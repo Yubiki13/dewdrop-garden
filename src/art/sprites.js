@@ -590,6 +590,40 @@ const BASKET = [
   '....BBBBBBBB....',
   E16, E16, E16, E16, E16,
 ];
+const TRASH = [
+  E16,
+  '......dddd......',
+  '......d..d......',
+  '..dddddddddddd..',
+  '..dSSSSSSSSSSd..',
+  '..dddddddddddd..',
+  '...dSsSsSsSsd...',
+  '...dSsSsSsSsd...',
+  '...dSsSsSsSsd...',
+  '...dSsSsSsSsd...',
+  '...dSsSsSsSsd...',
+  '...dSsSsSsSsd...',
+  '...dSsSsSsSsd...',
+  '....dddddddd....',
+  E16, E16,
+];
+const TRASH_OPEN = [
+  '.........dd.....',
+  '.......ddSSd....',
+  '.....ddSSSSd....',
+  '...ddSSSSSdd....',
+  '..dSSSSSddd.....',
+  '..dddddddddddd..',
+  '...dSsSsSsSsd...',
+  '...dSsSsSsSsd...',
+  '...dSsSsSsSsd...',
+  '...dSsSsSsSsd...',
+  '...dSsSsSsSsd...',
+  '...dSsSsSsSsd...',
+  '...dSsSsSsSsd...',
+  '....dddddddd....',
+  E16, E16,
+];
 const WEEDS = [
   ['...Y.....', '..YZY.h..', '...Y.hG..', '.h.G.Gg..', '.GhGhG...', 'gGgGgGg..'],
   ['.h...h...', 'hGh.hGh..', '.GgGgG...', '..gGg.h..', '.hGgGhG..', '.gGgGg...'],
@@ -601,6 +635,7 @@ export function buildCursorSprites() {
   return {
     open: sprite(HAND_OPEN, o), grab: sprite(HAND_GRAB, o), point: sprite(HAND_POINT, o),
     basket: sprite(BASKET),
+    trash: sprite(TRASH), trashOpen: sprite(TRASH_OPEN),
     weeds: WEEDS.map((w) => sprite(w, { outlineStrength: 0.5 })),
   };
 }

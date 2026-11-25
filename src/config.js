@@ -1,4 +1,4 @@
-export const VERSION = '1.3.0';
+export const VERSION = '1.3.1';
 export const TILE = 16;
 export const ORIG_W = 60; // the farm (garden, meadow, hills) is the first 60 columns
 export const MAP_W = 100; // + the Wildwood to the east (columns 60..99)

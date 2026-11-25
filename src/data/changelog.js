@@ -2,6 +2,17 @@
 // To add an update: put a new entry at the top and bump VERSION in src/config.js to match.
 export const CHANGELOG = [
   {
+    version: '1.3.1',
+    title: 'Tidy-Up Patch',
+    added: [
+      'Drag to place: hold the mouse down and sweep with gnomes, lamps, fences, sprinklers and any other decor to place a whole row at once',
+      'A trash can in your backpack. Drop an item in to throw it away, and click it again to take it back before you close the backpack',
+    ],
+    fixed: [
+      'Hovering between backpack slots no longer makes the backpack flicker and jump',
+    ],
+  },
+  {
     version: '1.3',
     title: 'The Wildwood Update',
     added: [

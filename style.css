@@ -140,7 +140,12 @@ img.icon { image-rendering: pixelated; image-rendering: crisp-edges; display: bl
 
 .invgrid { display: grid; grid-template-columns: repeat(10, calc(var(--p) * 22)); gap: var(--p); }
 .invgrid .rowsep { grid-column: 1 / -1; height: calc(var(--p) * 2); }
-.invinfo { margin-top: calc(var(--p) * 3); min-height: calc(var(--p) * 24); padding: calc(var(--p) * 1) calc(var(--p) * 2); font-size: calc(var(--p) * 7); }
+.invfoot { display: flex; gap: calc(var(--p) * 3); align-items: center; margin-top: calc(var(--p) * 3); }
+/* fixed height: a growing info box re-centred the modal and shifted the grid under the cursor, which flickered between slots */
+.invinfo { flex: 1; min-width: 0; height: calc(var(--p) * 30); box-sizing: border-box; overflow: hidden; padding: calc(var(--p) * 1) calc(var(--p) * 2); font-size: calc(var(--p) * 7); line-height: 1.15; }
+.trashslot { flex: none; }
+.trashslot .trashed { position: absolute; right: calc(var(--p) * -3); top: calc(var(--p) * -3); transform: scale(0.6); transform-origin: top right; opacity: 0.85; pointer-events: none; }
+.trashslot .trashed .key { display: none; }
 .invinfo b { font-size: calc(var(--p) * 8); }
 .invinfo .d { color: var(--ink-soft); font-size: calc(var(--p) * 6.5); margin-top: var(--p); }
 #held { position: fixed; pointer-events: none; z-index: 50; transform: translate(-50%, -50%); }

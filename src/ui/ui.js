@@ -492,10 +492,18 @@ export class UI {
       <button class="btn close">✕</button>
       <h2>Backpack <span class="sub"></span></h2>
       <div class="invgrid"></div>
-      <div class="invinfo paper"><span style="color:var(--ink-soft)">Hover over an item to see what it does.</span></div>
-      <div class="hint">Click to pick up &amp; swap · Shift-click to move between hotbar and bag · Tab to close</div>
+      <div class="invfoot">
+        <div class="invinfo paper"><span style="color:var(--ink-soft)">Hover over an item to see what it does.</span></div>
+        <div class="slotbox slot trashslot" title="Trash"></div>
+      </div>
+      <div class="hint">Click to pick up &amp; swap · Shift-click to move between hotbar and bag · Drop items in the trash to throw them away · Tab to close</div>
     </div>`);
+    this.trashed = null;
     this.openModal('inventory', el);
+    const trash = $('.trashslot', el);
+    trash.addEventListener('mousedown', (e) => { e.preventDefault(); this.clickTrash(); });
+    trash.addEventListener('mouseenter', () => this.showTrashInfo());
+    this.renderTrash();
     this.renderInventory();
     void g;
   }
@@ -514,6 +522,46 @@ export class UI {
       el.addEventListener('mouseenter', () => this.showInfo(g.inv[i]));
       root.appendChild(el);
     }
+  }
+
+  /* Trash: drop a held item in to throw it away. The last thing trashed can be clicked back out until the backpack closes. */
+  clickTrash() {
+    const g = this.game;
+    if (this.held) {
+      const s = this.held.slot;
+      const def = ITEMS[s.id];
+      if (def.kind === 'tool' && !def.price) { audio.play('error'); this.showTrashInfo(`You'll need your ${def.name}. It can't be thrown away!`); return; }
+      this.trashed = s;
+      this.held = null;
+      audio.play('trash');
+    } else if (this.trashed) {
+      const j = g.inv.indexOf(null);
+      this.held = { slot: this.trashed, from: j >= 0 ? j : 0 };
+      this.trashed = null;
+      audio.play('pickup');
+    } else return;
+    this.updateHeld();
+    this.renderTrash();
+    this.showTrashInfo();
+  }
+
+  renderTrash() {
+    const el = $('#modal-root .trashslot');
+    if (!el) return;
+    const t = this.trashed;
+    const can = `<img class="icon trashcan" src="${ART.cursor[t ? 'trashOpen' : 'trash'].img.toDataURL()}" style="width:calc(var(--p)*16)">`;
+    el.innerHTML = t ? can + `<div class="trashed">${this.slotInner(t, -1, false)}</div>` : can;
+    el.classList.toggle('full', !!t);
+  }
+
+  showTrashInfo(msg) {
+    const box = $('#modal-root .invinfo');
+    if (!box) return;
+    const t = this.trashed;
+    const body = msg || (t
+      ? `Threw away ${t.n > 1 ? t.n + '× ' : ''}${esc(toolName(t, ITEMS))}. Click the trash to take it back. It's gone for good once you close the backpack.`
+      : 'Pick up an item and drop it here to throw it away.');
+    box.innerHTML = `<b>Trash</b><div class="d">${body}</div>`;
   }
 
   showInfo(s) {
@@ -584,7 +632,8 @@ export class UI {
     const g = this.game;
     if (this.held.preview) { this.held = null; this.updateHeld(); return; }
     const s = this.held.slot;
-    if (!g.inv[this.held.from]) g.inv[this.held.from] = s;
+    const from = this.held.from;
+    if (from >= 0 && from < g.inv.length && !g.inv[from]) g.inv[from] = s;
     else {
       const j = g.inv.indexOf(null);
       if (j >= 0) g.inv[j] = s;

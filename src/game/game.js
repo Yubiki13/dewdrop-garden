@@ -3,7 +3,7 @@
 import {
   TILE, MAP_W, MAP_H, ORIG_H, MEADOW_END, HOUR_SECONDS, WET_HOURS, G_GRASS, G_SOIL, G_WATER, F_NONE, F_PATH, VERSION, PAN_SPEED, MEADOW_PRICE,
 } from '../config.js';
-import { World, LAYOUT } from './world.js';
+import { World, LAYOUT, isWild } from './world.js';
 import { GroundRenderer } from './ground.js';
 import { Particles } from './particles.js';
 import { Tutorial } from './tutorial.js';
@@ -427,7 +427,8 @@ export class Game {
       return;
     }
     this.apply(slot, def, tx, ty, false);
-    this.drag = { mode: PAINTABLE.has(slot.id) || def.kind === 'seed' ? 'paint' : 'none', last: { tx, ty } };
+    // seeds and anything placeable (gnomes, lamps, sprinklers...) can be swept across tiles
+    this.drag = { mode: PAINTABLE.has(slot.id) || def.kind === 'seed' || def.kind === 'place' ? 'paint' : 'none', last: { tx, ty } };
   }
 
   pointerHold(m) {
@@ -460,7 +461,10 @@ export class Game {
         } else {
           const slot = this.selected;
           if (!slot) { this.drag = null; return; }
-          this.apply(slot, ITEMS[slot.id], x, y, true);
+          const def = ITEMS[slot.id];
+          // the click itself is checked in pointerWild; a sweep mustn't carry seeds or decor into the Wildwood
+          if (isWild(x) && ['seed', 'use', 'place'].includes(def.kind)) continue;
+          this.apply(slot, def, x, y, true);
         }
       }
       d.last = { tx, ty };
